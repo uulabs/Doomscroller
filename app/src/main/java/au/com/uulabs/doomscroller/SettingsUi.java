@@ -39,7 +39,8 @@ final class SettingsUi {
     private SettingsUi() {
     }
 
-    static View build(final Activity activity, final Runnable close) {
+    static View build(final Activity activity, final Runnable close,
+                      final Runnable checkUpdates) {
         final Context context = activity;
 
         final ScrollView scroll = new ScrollView(context);
@@ -234,6 +235,36 @@ final class SettingsUi {
         column.addView(languageCard);
 
 
+
+        // ---- about and updates
+        column.addView(sectionLabel(context, "APP", null));
+
+        LinearLayout aboutCard = card(context);
+        aboutCard.setOrientation(LinearLayout.HORIZONTAL);
+        aboutCard.setGravity(Gravity.CENTER_VERTICAL);
+        int cardPad = dp(context, 16);
+        aboutCard.setPadding(cardPad, cardPad, cardPad, cardPad);
+
+        TextView aboutTitle = new TextView(context);
+        aboutTitle.setText("Version " + BuildConfig.VERSION_NAME);
+        aboutTitle.setTextColor(TEXT);
+        aboutTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f);
+        aboutCard.addView(aboutTitle, new LinearLayout.LayoutParams(
+                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+
+        TextView check = new TextView(context);
+        check.setText("Check for updates");
+        check.setTextColor(ACCENT);
+        check.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f);
+        check.setPadding(dp(context, 10), dp(context, 6), 0, dp(context, 6));
+        check.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                checkUpdates.run();
+            }
+        });
+        aboutCard.addView(check);
+        column.addView(aboutCard);
 
         // ---- done
         TextView done = new TextView(context);

@@ -1496,6 +1496,11 @@ public class Main extends Activity {
             public void run() {
                 toggleSettings();
             }
+        }, new Runnable() {
+            @Override
+            public void run() {
+                Updater.check(Main.this, true);
+            }
         });
     }
 

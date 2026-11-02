@@ -36,9 +36,14 @@ final class Updater {
     }
 
     static void check(final Activity activity) {
+        check(activity, false);
+    }
+
+    /** A deliberate check skips the hourly throttle and always reports a result. */
+    static void check(final Activity activity, final boolean force) {
         final long now = System.currentTimeMillis();
         long last = Prefs.lastUpdateCheck(activity);
-        if (now - last < HOUR) {
+        if (!force && now - last < HOUR) {
             return;
         }
         Prefs.setLastUpdateCheck(activity, now);
@@ -54,6 +59,14 @@ final class Updater {
                     final String page = release.optString("html_url", "");
                     String latest = tag.startsWith("v") ? tag.substring(1) : tag;
                     if (!newer(latest, BuildConfig.VERSION_NAME)) {
+                        if (force) {
+                            activity.runOnUiThread(new Runnable() {
+                                @Override
+                                public void run() {
+                                    upToDate(activity);
+                                }
+                            });
+                        }
                         return;
                     }
                     final String apk = BuildConfig.SELF_UPDATE ? apkUrl(release) : null;
@@ -68,6 +81,18 @@ final class Updater {
                 }
             }
         }).start();
+    }
+
+    private static void upToDate(final Activity activity) {
+        if (activity.isFinishing()) {
+            return;
+        }
+        new AlertDialog.Builder(activity)
+                .setTitle("Up to date")
+                .setMessage("You are running " + BuildConfig.VERSION_NAME
+                        + ", the latest published version.")
+                .setPositiveButton("OK", null)
+                .show();
     }
 
     private static void offer(final Activity activity, String version,
