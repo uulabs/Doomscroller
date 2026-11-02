@@ -96,6 +96,7 @@ public class Main extends Activity {
     private volatile boolean filling;
     private volatile boolean destroyed;
     private TopicSampler topicSampler;
+    private TextView loadingMessage;
     private final ArrayDeque<Ready> forward = new ArrayDeque<Ready>();
     private TextView controlsSource;
     private TextView rotateButton;
@@ -117,6 +118,10 @@ public class Main extends Activity {
     private WebView probe;
     private YoutubeResolver ytResolver;
     private InstagramResolver igResolver;
+    // Cold Meta discovery starts broadly; an empty indexed subject broadens the
+    // next attempt in that source's selected language/family, without learning preferences.
+    private final Set<String> broadenMeta = new HashSet<String>(
+            java.util.Arrays.asList(Sources.INSTAGRAM, Sources.FACEBOOK));
 
     private static final class Ready {
         final Sources.Item item;
@@ -209,6 +214,8 @@ public class Main extends Activity {
 
     private void buildUi() {
         Vocab.load(getAssets());
+        try { Sources.loadReelCache(getAssets().open("meta-reels.tsv")); }
+        catch (java.io.IOException unavailable) { /* Live discovery remains available. */ }
         topicSampler = new TopicSampler(Vocab.topics(getAssets()), rand, new TopicSampler.State() {
             public String get(String key) { return Prefs.wordBag(Main.this, key); }
             public void put(String key, String value) { Prefs.setWordBag(Main.this, key, value); }
@@ -268,6 +275,7 @@ public class Main extends Activity {
         face.setImageResource(R.drawable.doomer);
         loading.addView(face, new LinearLayout.LayoutParams(dp(210), dp(210)));
         TextView label = new TextView(this);
+        loadingMessage = label;
         label.setText("loading");
         label.setTextColor(Color.parseColor("#AAFFFFFF"));
         label.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f);
@@ -741,16 +749,32 @@ public class Main extends Activity {
                 TypedValue.COMPLEX_UNIT_DIP, value, getResources().getDisplayMetrics());
     }
 
+    private volatile long nextDiscoveryAt;
+    private final Runnable retryDiscovery = new Runnable() {
+        @Override public void run() { if (!destroyed) pump(); }
+    };
+
     private void fill() {
         if (destroyed || filling) {
             return;
         }
+        long wait = Math.max(nextDiscoveryAt - android.os.SystemClock.uptimeMillis(),
+                Sources.retryDelayMillis(Prefs.sources(this)));
+        if (wait > 0) {
+            if (wait > 5000 && active == null && pending == null && loadingMessage != null)
+                loadingMessage.setText("Selected sources unavailable\nRetrying automatically");
+            handler.removeCallbacks(retryDiscovery);
+            handler.postDelayed(retryDiscovery, wait);
+            return;
+        }
+        if (loadingMessage != null) loadingMessage.setText("loading");
         filling = true;
         try { io.execute(new Runnable() {
             @Override
             public void run() {
+                boolean found = false;
+                int attempts = 0;
                 try {
-                    int attempts = 0;
                     while (!destroyed) {
                         synchronized (ready) {
                             if (ready.size() >= PREFETCH) {
@@ -760,11 +784,13 @@ public class Main extends Activity {
                         if (++attempts > 10) {
                             break;   // give up for now rather than spin forever
                         }
+                        if (Sources.retryDelayMillis(Prefs.sources(Main.this)) > 0) break;
                         Ready r = produce();
                         if (destroyed) return;
                         if (r == null) {
                             continue;   // this subject was refused; try another
                         }
+                        found = true;
                         synchronized (ready) {
                             ready.addLast(r);
                         }
@@ -776,6 +802,7 @@ public class Main extends Activity {
                         });
                     }
                 } finally {
+                    if (!found && attempts > 0) nextDiscoveryAt = android.os.SystemClock.uptimeMillis() + 2000;
                     filling = false;
                 }
                 handler.post(new Runnable() {
@@ -809,12 +836,16 @@ public class Main extends Activity {
             return null;
         }
         String source = pickSource(sources);
-        String word = pickWord();
+        String word = pickWord(source);
         List<Sources.Item> candidates;
         try {
             candidates = Sources.fetch(source, word);
         } catch (Exception e) {
             return null;
+        }
+        if (Sources.INSTAGRAM.equals(source) || Sources.FACEBOOK.equals(source)) {
+            if (candidates.isEmpty()) broadenMeta.add(source);
+            else broadenMeta.remove(source);
         }
         lastSource = source;
         List<Sources.Item> filtered = filter(candidates);
@@ -839,8 +870,13 @@ public class Main extends Activity {
             return media;
         }
         if ("igprobe".equals(item.kind)) {
-            if (igResolver == null || !isFinishing()) {
-                String media = igResolver.resolveBlocking(item.id, 20000);
+            String direct = Sources.instagramMedia(item.id);
+            if (direct != null) {
+                igTrace(item.id + (direct.isEmpty() ? " -> public embed unavailable" : " -> direct metadata"));
+                return direct.isEmpty() ? null : direct;
+            }
+            if (igResolver != null && !destroyed && !isFinishing()) {
+                String media = igResolver.resolveBlocking(item.id, 6000);
                 igTrace(item.id + " -> " + (media == null ? "NOURL" :
                         media.substring(0, Math.min(70, media.length()))));
                 return media;
@@ -1261,10 +1297,11 @@ public class Main extends Activity {
      * back, and it is stored, so quitting the app does not hand out the same
      * word again either.
      */
-    private String pickWord() {
+    private String pickWord(String source) {
         TopicSampler.Topic topic = topicSampler.next(Prefs.languages(this));
-        traceWord(topic.query);
-        return topic.query;
+        String query = broadenMeta.contains(source) ? Vocab.familyQuery(topic) : topic.query;
+        traceWord(query);
+        return query;
     }
 
     /** Records each subject drawn, so variety can be measured rather than felt. */
@@ -1322,15 +1359,25 @@ public class Main extends Activity {
         return out;
     }
 
+    private void postSlotTask(Slot slot, Runnable task, long delay) {
+        handler.postAtTime(task, slot, android.os.SystemClock.uptimeMillis() + delay);
+    }
+
+    private boolean sourceEnabled(Sources.Item item) {
+        return Prefs.sources(this).contains(item.source)
+                || (BuildConfig.DEBUG && "Probe".equals(item.source) && Prefs.probeLandscape(this));
+    }
+
     private void pump() {
         if (destroyed) return;
         if (pending != null) {
             return;
         }
-        Ready r;
-        synchronized (ready) {
-            r = ready.pollFirst();
-        }
+        Ready selected;
+        do {
+            synchronized (ready) { selected = ready.pollFirst(); }
+        } while (selected != null && !sourceEnabled(selected.item));
+        final Ready r = selected;
         if (r == null) {
             fill();
             return;
@@ -1423,7 +1470,7 @@ public class Main extends Activity {
             stage.addView(slot.rootView, match());
             pending = slot;
             w.loadUrl(r.url);
-            handler.postDelayed(() -> {
+            postSlotTask(slot, () -> {
                 if (pending == slot && !portraitVerified(slot)) rejectSlot(slot);
             }, 25000);
             fill();
@@ -1559,17 +1606,14 @@ public class Main extends Activity {
         igTrace("prepare " + r.item.source + " url=" + r.url.substring(0, Math.min(80, r.url.length())));
         pending = slot;
         slot.player.prepare();
-        handler.postDelayed(new Runnable() {
+        postSlotTask(created, new Runnable() {
             @Override
             public void run() {
                 if (pending == created
                         && (created.player.getPlaybackState() != Player.STATE_READY
                             || !portraitVerified(created))) {
                     setStatus("skipped: not ready");
-                    pending = null;
-                    created.player.release();
-                    stage.removeView(created.rootView);
-                    pump();
+                    rejectSlot(created);
                 }
             }
         }, 25000);
@@ -1743,6 +1787,7 @@ public class Main extends Activity {
         if (slot == null || slot.rejected) {
             return;
         }
+        handler.removeCallbacksAndMessages(slot);
         slot.rejected = true;
         if (slot == pending) {
             pending = null;
@@ -1785,6 +1830,11 @@ public class Main extends Activity {
 
     private void next() {
         if (destroyed) return;
+        if (pending != null && !sourceEnabled(pending.item)) {
+            wantNext = true;
+            rejectSlot(pending);
+            return;
+        }
         if (!forward.isEmpty() && (pending == null || pending.navigation == 0)) {
             prepareHistory(forward.pollFirst(), 1);
             return;
@@ -1794,6 +1844,12 @@ public class Main extends Activity {
                 // Nothing is buffered yet, so the clip leaves the screen and the
                 // next one arrives when it is ready.
                 slideOut(active.rootView, -swapDirection);
+                // No audio may remain behind the loading screen while discovery waits.
+                if (active.player != null) {
+                    active.player.setVolume(0f);
+                    active.player.pause();
+                }
+                if (active.web != null) active.web.evaluateJavascript(JS_IDLE, null);
                 // The clip is leaving, so the face may cover the wait instead of
                 // a black screen.
                 active.rendered = false;
@@ -1815,6 +1871,8 @@ public class Main extends Activity {
         Slot old = active;
         active = pending;
         pending = null;
+        handler.removeCallbacksAndMessages(active);
+        if (old != null) handler.removeCallbacksAndMessages(old);
         current = active.item;
         updateRotateControl();
         remember(current.toString());
@@ -1877,7 +1935,7 @@ public class Main extends Activity {
             // advert can hold it indefinitely - so a page slot is capped and
             // the feed moves on.
             final Slot shown = active;
-            handler.postDelayed(new Runnable() {
+            postSlotTask(shown, new Runnable() {
                 @Override
                 public void run() {
                     if (active == shown) {
@@ -1917,6 +1975,7 @@ public class Main extends Activity {
 
     private void prepareHistory(Ready entry, int direction) {
         if (pending != null) {
+            handler.removeCallbacksAndMessages(pending);
             // Preserve the unused discovery clip while retracing history.
             Ready parked = new Ready(pending.item, pending.url, pending.web != null, false);
             synchronized (ready) { ready.addFirst(parked); }
@@ -2190,12 +2249,21 @@ public class Main extends Activity {
                     + " verified=" + (active != null && portraitVerified(active))
                     + " known=" + (active != null && active.sizeKnown)
                     + " ratio=" + (active == null ? -1 : active.displayRatio));
-            if (active != null && !portraitVerified(active)) {
+            synchronized (ready) { ready.removeIf(entry -> !sourceEnabled(entry.item)); }
+            history.removeIf(entry -> !sourceEnabled(entry.item));
+            forward.removeIf(entry -> !sourceEnabled(entry.item));
+            if (pending != null && !sourceEnabled(pending.item)) rejectSlot(pending);
+            if (active != null && (!sourceEnabled(active.item) || !portraitVerified(active))) {
                 disposeActiveAndAdvance(active);
             }
             if (active != null && active.player != null && !paused && portraitVerified(active) && !active.rejected) {
                 active.player.play();
             }
+            // Newly enabled sources must not inherit the previous selection's wait.
+            nextDiscoveryAt = 0;
+            handler.removeCallbacks(retryDiscovery);
+            pump();
+            fill();
             return;
         }
         if (active != null && active.player != null) {
@@ -2252,10 +2320,17 @@ public class Main extends Activity {
     protected void onDestroy() {
         super.onDestroy();
         destroyed = true;
+        if (active != null) handler.removeCallbacksAndMessages(active);
+        if (pending != null) handler.removeCallbacksAndMessages(pending);
         handler.removeCallbacks(hideControls);
         handler.removeCallbacks(controlsTick);
+        handler.removeCallbacks(retryDiscovery);
         // Keep delayed retiring-player releases alive; pump/fill/watch stop via destroyed.
         io.shutdownNow();
+        if (igResolver != null) {
+            igResolver.destroy();
+            igResolver = null;
+        }
         if (active != null && active.web != null) silenceAndDestroy(active.web);
         if (pending != null && pending.web != null) silenceAndDestroy(pending.web);
         if (active != null && active.player != null) {

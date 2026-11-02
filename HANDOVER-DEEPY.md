@@ -1,6 +1,12 @@
 # Doomscroller — Deepy handover (live draft)
 
-This document is being maintained during investigation. Do not treat the working tree or any unpublished APK as accepted. The owner asked Codex to continue until the account usage meter reaches 65% remaining, then halt and leave a detailed handover. Initial verified reading was 84% remaining (weekly account-wide allowance). No new release is authorized to bypass actual sound, scrolling and autoplay acceptance.
+## Current status — 3 November 2026
+
+0.1.28/code29 is the public release. The current repair candidate is 0.1.29/code30, built and signature/asset verified but not published yet. HEAD before this repair is 9a8200b on main. Current changes and acceptance details are recorded in the final section and docs/REPAIR-0.1.28-META.md; older entries below are historical checkpoints, not current repository/device status.
+
+Owner authorized a new working release and later explicitly said “Publish please.” Do not invent another approval requirement. Verify what can actually be measured and disclose that speaker listening and Xiaomi15Ultra behavior have not been independently verified. S98 is the remote test device; Blade is untouched. Latest verified usage is 71% remaining; halt at 65% remaining if reached and preserve a detailed handover. This is an account-wide meter, not a task token budget.
+
+## Historical investigation (superseded where later checkpoints differ)
 
 ## Immediate problem and owner requirements
 
@@ -168,3 +174,63 @@ Owner identified the Xiaomi as a 15 Ultra and explicitly instructed “Publish p
 ## Published — 3 November 2026
 
 0.1.28 is public and verified as GitHub latest: https://github.com/uulabs/Doomscroller/releases/tag/v0.1.28 . Release source commit bd6e89c was pushed over the configured SSH remote. The three APK assets and SHA256SUMS were downloaded from the public release and matched local hashes. Receipt: `/Volumes/970P/UULabs/Artifacts/UUDoomscroller/0.1.28-local-candidate/published-receipt.json`. The earlier unpublished/release-blocked descriptions are historical and superseded. Publication followed the owner’s explicit instruction; no extra audible acceptance claim is implied. No new device interactions were needed for publication. The owned S98 lease was released; production 0.1.28 remains installed, and the force-stopped diagnostic app remains available for follow-up evidence.
+
+## Owner rejected 0.1.28 behaviour — 3 November 2026
+
+Meta-only loading, visible TikTok controls and continued scrolling problems reported after publication. See `docs/REPAIR-0.1.28-META.md` for confirmed parsing/empty-loop defects, local repairs, provider refusal evidence, failed/invalid visual tests, and required continuation. No follow-up release published.
+
+Unlocked S98 follow-up: actual TikTok controls suppression verified; 30+6 natural swipes completed after targeted retired-slot timer cleanup. Meta-only still unavailable, with busy retry removed. See the unlocked verification section in docs/REPAIR-0.1.28-META.md; no new release or Meta acceptance.
+
+
+## 3 November repair continuation: real Meta supply, not debug demonstrations
+
+Current production remains 0.1.28/code29. Replacement is not yet published at this checkpoint. Earlier fixed-link debug demonstrations did not establish release discovery. The failed hidden Google search experiment was removed; its source and HTTP429 evidence are preserved in Artifacts/UUDoomscroller/0.1.28-meta-repair/rendered-search-experiment.
+
+### Source repairs to preserve
+
+- Sources: correct escaped Meta host regexes, decode DDG redirects, pace failed indexes, retain unused pool entries, remove automatic debug seeds, TikTok controls=0 in both URL constructors.
+- Bundled asset: 6000 Instagram + 2181 Facebook public IDs sampled across public CDX index bands. Live provider resolution, not archive video playback. Same production/debug loader, drawn without replacement. See docs/META-DISCOVERY.md and docs/meta-catalog-receipt.json. Facebook generation stopped on TLS error after three successful pages; do not claim comprehensive/uniform coverage. Direct CDX from S98 timed out, so live indexes alone remain insufficient.
+- InstagramResolver: request-owned result/callback/WebView, bounded wait, late callbacks cannot destroy or complete a newer request; destroy wakes worker. Public embed metadata fast path skips explicit unavailable posts. WebView fallback now six seconds; this bounds that fallback only, not total network resolution time.
+- Main: coalesced retries avoid empty fill/pump churn; cancelled Slot geometry/dwell timers release references; outgoing clip is paused/muted if a swipe reaches an unbuffered wait. Source changes discard disabled queued/history entries and guard admission against in-flight old selection results.
+- Existing native playback controls/audio scripts, FIT, decoded portrait admission, immediate rotate affordance, source label, larger history and topic sampler remain. No replacement provider toolbar or hidden search renderer is added.
+
+### Evidence already obtained
+
+Actual Sources fixture checks: strict-index backoff, non-Meta eligibility during Meta cooldown, pooled-item eligibility, public embed URL decoding/unavailable skipping, one-at-a-time draw. Actual cache test: 6000/2181 loaded; 100 distinct draws each with no network; second load does not replenish consumed IDs. Actual InstagramResolver compiled against controlled Android stubs: cancellation before UI creation, late callback ownership, exact-view cleanup and destroy notification all pass. These host checks do not prove speaker sound.
+
+S98 TikTok natural-feed tests: 30 forward plus six alternating back/forward, 32 promotions. Final history alternated the same two IDs correctly. WebViews at checkpoints 4/3/2/4; one Activity. After reversal burst transient14 naturally settled to3. Provider bar absent and original native bar visually present. Evidence predates latest Meta/source-filter changes; mixed regression is being rerun.
+
+S98 Instagram-only: nine promotions/nine forward swipes, paired frames show motion. 1280x720 clip rejected before promotion. Facebook-only: seven promotions/six forward swipes, paired frames show motion. These use random bundled URLs with the same loader as release, not a fixed demonstration sequence. Instagram evidence: Scratch/UUDoomscroller/codex-retry/20261102T211741Z-dcadc54a3c79. Facebook evidence: 20261102T212227Z-7b992f30d605. Preserve selected evidence to authoritative artifacts before disposal.
+
+### Remaining acceptance at this checkpoint
+
+Finish mixed 30+ swipe/history run, exercise source toggles through settings, verify landscape affordance/revalidation, build both signed higher-version release variants from production source (not .diagnostic), verify signer/assets and install final release preserving production data. Only then publish a new tag; never overwrite 0.1.28 assets. User has authorized publication. No claim of heard speaker output is possible from screenshots. Xiaomi15Ultra is the user's second test device; remote testing is on S98 only, Blade untouched.
+
+Cache clips lack dependable language/topic metadata: the selected query does not describe their content, and spoken-language percentages cannot be guaranteed. Existing title heuristics remain approximate. Background native resume behavior is pre-existing and was not broadly rewritten in this repair. Keep further changes driven by reproduced evidence.
+
+Usage checkpoint: 29% used / 71% remaining; owner requested halt at 65% remaining, not 65% used. S98 lease currently held as codex-meta-repair-20261103; separate diagnostic package is being tested, production0.1.28/settings preserved. No new release or cleanup completed at this checkpoint.
+
+
+### Mixed-source acceptance, 3 November 08:26–08:32 AEDT
+
+Latest diagnostic completed 32 forward swipes and six alternating back/forward swipes with Instagram, Facebook and TikTok enabled. Final six promotions alternate TikTok:7541498962910530838 and Instagram:DLIzWfhNoxE three times. No permanent feed stall or app crash was observed. Original native playback bar is visible in the final Instagram capture; TikTok frame captures show no provider playback toolbar. Logcat is a rolling buffer, so its final count is not a full-session promotion total.
+
+Memory at rounds 3/6/9/12/15/21/27/30: WebViews 1/2/1/3/1/1/2/2, one Activity throughout; PSS at round30 was267132KiB. Android reported an active media track, not proof of audible speaker output. Network waits still occur; do not claim perfectly smooth or instantaneous scrolling. Selected evidence is preserved at Artifacts/UUDoomscroller/0.1.29-local-candidate/evidence/mixed-feed.
+
+Signed 0.1.29/code30 standard and selfupdate candidates built successfully, release lint passed, signer matched 93b7263c3359ff80b7c071cce7e2a648bc49f2e9bf547fcaf2b0c01e56a16358, application ID and packaged discovery assets matched production. Candidates are held externally; publication is still pending final settings/rotation/release-install checks.
+
+
+### Source settings and landscape checks
+
+Disabling TikTok through settings, with YouTube already off, produced six subsequent Meta-only promotions including backward/forward replay. The initial host assertion failed because its string-prefix subtraction assumed logcat retained the entire earlier buffer. Preserved evidence was revalidated against the recorded 08:32:30 start boundary; all six later promotions are Instagram/Facebook. This is a harness correction, not an app failure being hidden.
+
+An explicitly enabled diagnostic-only 640x360 stream measured ratio1.7777778, displayed letterboxed with the rotate button already visible in portrait orientation. Turning landscape off reported active=true, verified=false, known=true, ratio1.7777778. The immediate post-toggle screenshot was black and is not claimed as a complete visual recovery test. Real Instagram portrait-only testing separately rejected1280x720 before promotion. Production never enables the debug probe.
+
+The exact signed 0.1.29 recommended APK was installed with adb install -r on S98, preserving production data. Installed base.apk bytes matched the held candidate hash. Existing source choices (including X enabled) and playback-bar-off preference were observed after update; temporary smoke-test changes will be restored. Production release Meta-only visual smoke is in progress.
+
+
+### Signed release acceptance and publication preparation
+
+The exact signed 0.1.29/code30 recommended APK played Instagram and Facebook in a Meta-only release smoke on S98, with five forward swipes and paired frames showing motion for both providers. Original native controls and plain source names were visible when temporarily enabled. Crash log for the release process was empty. Owner's original YouTube/TikTok/X/Instagram/Facebook enabled, PeerTube disabled, landscape disabled and playback-bar disabled choices were restored after testing. No production data was cleared. Speaker listening and Xiaomi15Ultra acceptance remain unverified; network loading gaps remain possible.
+
+Owner again explicitly requested publication. Publish the held, verified artifacts as v0.1.29; do not rebuild or overwrite earlier version assets. Recommended/compatibility SHA256: bc4befc5d669aadeb6b6a946afc8f9be8c2fa3989c4e4e086437c8ed952bfd32. Manual-update SHA256: ef52dadc7fb270657c322ca03730af99f7d9cf5de3947998bba2e00b87f8ef21. Authoritative artifacts: /Volumes/970P/UULabs/Artifacts/UUDoomscroller/0.1.29-local-candidate.

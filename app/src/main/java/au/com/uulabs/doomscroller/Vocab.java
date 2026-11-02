@@ -54,6 +54,7 @@ public final class Vocab {
     private static final Map<String, List<String>> WORDS =
             new HashMap<String, List<String>>();
     private static boolean loaded;
+    private static final Map<String, String> FAMILY_QUERIES = new HashMap<>();
 
     private Vocab() {
     }
@@ -64,6 +65,16 @@ public final class Vocab {
             return;
         }
         loaded = true;
+        try (BufferedReader r = new BufferedReader(new InputStreamReader(
+                assets.open("topic-families.tsv"), "UTF-8"))) {
+            String line;
+            while ((line = r.readLine()) != null) {
+                if (line.startsWith("#")) continue;
+                String[] fields = line.split("\\t", 3);
+                if (fields.length == 3) FAMILY_QUERIES.put(fields[0]+"|"+fields[1], fields[2]);
+            }
+        } catch (java.io.IOException missing) { /* Existing detailed terms still work. */ }
+
         for (Lang lang : ALL) {
             WORDS.put(lang.code, read(assets, lang.code));
         }
@@ -93,6 +104,11 @@ public final class Vocab {
             }
         }
         return words;
+    }
+
+    public static String familyQuery(TopicSampler.Topic topic) {
+        String query = FAMILY_QUERIES.get(topic.language + "|" + topic.domain);
+        return query == null ? topic.query : query;
     }
 
     public static Lang byCode(String code) {

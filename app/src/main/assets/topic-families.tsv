@@ -1,0 +1,492 @@
+# language	family	query; Wikidata root labels, CC0; 2026-11-03
+en	sport	sport
+ja	sport	スポーツ
+zh	sport	体育
+ko	sport	스포츠
+es	sport	deporte
+pt	sport	desporto
+fr	sport	sport
+de	sport	Sport
+it	sport	sport
+ru	sport	спорт
+ar	sport	رياضة
+hi	sport	खेल
+id	sport	olahraga
+tr	sport	spor
+th	sport	กีฬา
+en	food	food
+ja	food	食物
+zh	food	食物
+ko	food	음식
+es	food	alimento
+pt	food	alimento
+fr	food	nourriture
+de	food	Nahrung
+it	food	alimento
+ru	food	пища
+ar	food	طعام
+hi	food	भोजन
+id	food	makanan
+tr	food	yiyecek
+th	food	อาหาร
+en	drink	drink
+ja	drink	飲料
+zh	drink	饮料
+ko	drink	음료
+es	drink	bebida
+pt	drink	bebida
+fr	drink	boisson
+de	drink	Getränk
+it	drink	bevanda
+ru	drink	напиток
+ar	drink	شراب
+hi	drink	पेय-पदार्थ
+id	drink	minuman
+tr	drink	içecek
+th	drink	เครื่องดื่ม
+en	music	musical instrument
+ja	music	楽器
+zh	music	乐器
+ko	music	악기
+es	music	instrumento musical
+pt	music	instrumento musical
+fr	music	instrument de musique
+de	music	Musikinstrument
+it	music	strumento musicale
+ru	music	музыкальный инструмент
+ar	music	آلة موسيقية
+hi	music	वाद्य यन्त्र
+id	music	alat musik
+tr	music	müzik aleti
+th	music	เครื่องดนตรี
+en	dance	dance
+ja	dance	ダンス
+zh	dance	舞蹈
+ko	dance	춤
+es	dance	danza
+pt	dance	dança
+fr	dance	danse
+de	dance	Tanz
+it	dance	danza
+ru	dance	танец
+ar	dance	رقص
+hi	dance	नृत्य
+id	dance	tari
+tr	dance	dans
+th	dance	การเต้นรำ
+en	craft	craft
+ja	craft	工芸
+zh	craft	技艺
+ko	craft	공예
+es	craft	oficio
+pt	craft	ofício
+fr	craft	métier manuel
+de	craft	Handwerk
+it	craft	mestiere
+ru	craft	ремесло
+ar	craft	حرفة
+hi	craft	शिल्पकर्म
+id	craft	Kerajinan
+tr	craft	meslek
+en	art	art
+ja	art	芸術
+zh	art	藝術
+ko	art	예술
+es	art	arte
+pt	art	arte
+fr	art	art
+de	art	Kunst
+it	art	arte
+ru	art	искусство
+ar	art	فن
+hi	art	कला
+id	art	seni
+tr	art	sanat
+th	art	ศิลปะ
+en	clothing	clothing
+ja	clothing	被服
+zh	clothing	服装
+ko	clothing	옷
+es	clothing	indumentaria
+pt	clothing	vestuário
+fr	clothing	vêtement
+de	clothing	Kleidung
+it	clothing	abbigliamento
+ru	clothing	одежда
+ar	clothing	ملابس
+hi	clothing	परिधान
+id	clothing	pakaian
+tr	clothing	giyim
+th	clothing	เสื้อผ้า
+en	vehicles	vehicle
+ja	vehicles	乗り物
+zh	vehicles	載具
+ko	vehicles	탈것
+es	vehicles	vehículo
+pt	vehicles	veículo
+fr	vehicles	véhicule
+de	vehicles	Fahrzeug
+it	vehicles	veicolo
+ru	vehicles	транспортное средство
+ar	vehicles	مركبة
+hi	vehicles	वाहन
+id	vehicles	kendaraan
+tr	vehicles	taşıt
+th	vehicles	ยานพาหนะ
+en	aircraft	aircraft
+ja	aircraft	航空機
+zh	aircraft	航空器
+ko	aircraft	항공기
+es	aircraft	aeronave
+pt	aircraft	aeronave
+fr	aircraft	aéronef
+de	aircraft	Luftfahrzeug
+it	aircraft	aeromobile
+ru	aircraft	воздушное судно
+ar	aircraft	مركبة جوية
+hi	aircraft	वायुयान
+id	aircraft	wahana udara
+tr	aircraft	hava aracı
+th	aircraft	อากาศยาน
+en	watercraft	watercraft
+ja	watercraft	船舶
+zh	watercraft	船
+ko	watercraft	워터크래프트
+es	watercraft	embarcación
+pt	watercraft	embarcação
+fr	watercraft	embarcation
+de	watercraft	Wasserfahrzeug
+it	watercraft	natante
+ru	watercraft	плавучее средство
+ar	watercraft	مركبة مائية
+id	watercraft	wahana air
+tr	watercraft	Su taşıtı
+th	watercraft	พาหนะทางน้ำ
+en	occupations	profession
+ja	occupations	専門職
+zh	occupations	專業
+ko	occupations	전문직
+es	occupations	profesión
+pt	occupations	profissão
+fr	occupations	profession
+de	occupations	Beruf
+it	occupations	professione
+ru	occupations	профессия
+ar	occupations	مهنة
+hi	occupations	व्यवसाय
+id	occupations	profesi
+tr	occupations	meslek
+th	occupations	วิชาชีพ
+en	tools	physical tool
+ja	tools	物理的な道具
+zh	tools	实体工具
+ko	tools	도구
+es	tools	herramienta
+pt	tools	ferramenta
+fr	tools	outil
+de	tools	Werkzeug
+it	tools	attrezzo
+ru	tools	физический инструмент
+ar	tools	أداة
+hi	tools	उपकरण
+id	tools	alat
+tr	tools	alet
+th	tools	เครื่องมือ
+en	machines	machine
+ja	machines	機械
+zh	machines	机械
+ko	machines	기계
+es	machines	máquina
+pt	machines	máquina
+fr	machines	machine
+de	machines	Maschine
+it	machines	macchina
+ru	machines	машина
+ar	machines	آلة
+hi	machines	यंत्र
+id	machines	mesin
+tr	machines	makine
+th	machines	เครื่องจักร
+en	computing	computer science
+ja	computing	計算機科学
+zh	computing	計算機科學
+ko	computing	컴퓨터 과학
+es	computing	ciencias de la computación
+pt	computing	ciência de computadores
+fr	computing	informatique
+de	computing	Informatik
+it	computing	informatica
+ru	computing	информатика
+ar	computing	علم الحاسوب
+hi	computing	संगणक विज्ञान
+id	computing	ilmu komputer
+tr	computing	bilgisayar bilimi
+th	computing	วิทยาการคอมพิวเตอร์
+en	artificial-intelligence	artificial intelligence
+ja	artificial-intelligence	人工知能
+zh	artificial-intelligence	人工智能
+ko	artificial-intelligence	인공지능
+es	artificial-intelligence	inteligencia artificial
+pt	artificial-intelligence	inteligência artificial
+fr	artificial-intelligence	intelligence artificielle
+de	artificial-intelligence	künstliche Intelligenz
+it	artificial-intelligence	intelligenza artificiale
+ru	artificial-intelligence	искусственный интеллект
+ar	artificial-intelligence	ذكاء اصطناعي
+hi	artificial-intelligence	कृत्रिम बुद्धिमत्ता
+tr	artificial-intelligence	yapay zekâ
+th	artificial-intelligence	ปัญญาประดิษฐ์
+en	technology	technology
+ja	technology	テクノロジー
+zh	technology	技术
+ko	technology	기술
+es	technology	tecnología
+pt	technology	tecnologia
+fr	technology	technologie
+de	technology	Technologie
+it	technology	tecnologia
+ru	technology	технология
+ar	technology	تقانة
+hi	technology	प्रौद्योगिकी
+id	technology	teknologi
+tr	technology	teknoloji
+th	technology	เทคโนโลยี
+en	science	science
+ja	science	科学
+zh	science	科學
+ko	science	과학
+es	science	ciencia
+pt	science	ciência
+fr	science	science
+de	science	Wissenschaft
+it	science	scienza
+ru	science	наука
+ar	science	علم
+hi	science	विज्ञान
+id	science	ilmu
+tr	science	bilim
+th	science	วิทยาศาสตร์
+en	mathematics	mathematics
+ja	mathematics	数学
+zh	mathematics	數學
+ko	mathematics	수학
+es	mathematics	matemática
+pt	mathematics	matemática
+fr	mathematics	mathématiques
+de	mathematics	Mathematik
+it	mathematics	matematica
+ru	mathematics	математика
+ar	mathematics	رياضيات
+hi	mathematics	गणित
+id	mathematics	matematika
+tr	mathematics	matematik
+th	mathematics	คณิตศาสตร์
+en	astronomy	astronomy
+ja	astronomy	天文学
+zh	astronomy	天文學
+ko	astronomy	천문학
+es	astronomy	astronomía
+pt	astronomy	astronomia
+fr	astronomy	astronomie
+de	astronomy	Astronomie
+it	astronomy	astronomia
+ru	astronomy	астрономия
+ar	astronomy	علم الفلك
+hi	astronomy	खगोल शास्त्र
+id	astronomy	astronomi
+tr	astronomy	gök bilimi
+th	astronomy	ดาราศาสตร์
+en	geology	geology
+ja	geology	地質学
+zh	geology	地質學
+ko	geology	지질학
+es	geology	geología
+pt	geology	geologia
+fr	geology	géologie
+de	geology	Geologie
+it	geology	geologia
+ru	geology	геология
+ar	geology	جيولوجيا
+hi	geology	भूविज्ञान
+id	geology	geologi
+tr	geology	yer bilimi
+th	geology	ธรณีวิทยา
+en	engineering	engineer
+ja	engineering	エンジニア
+zh	engineering	工程师
+ko	engineering	기술자
+es	engineering	ingeniero
+pt	engineering	engenheiro
+fr	engineering	ingénieur ou ingénieure
+de	engineering	Ingenieur
+it	engineering	ingegnere
+ru	engineering	инженер
+ar	engineering	مهندس
+hi	engineering	अभियन्ता
+id	engineering	insinyur
+tr	engineering	mühendis
+th	engineering	วิศวกร
+en	weather	weather
+ja	weather	天気
+zh	weather	天氣
+ko	weather	날씨
+es	weather	tiempo atmosférico
+pt	weather	tempo
+fr	weather	temps
+de	weather	Wetter
+it	weather	tempo
+ru	weather	погода
+ar	weather	طقس
+hi	weather	मौसम
+id	weather	cuaca
+tr	weather	hava durumu
+th	weather	ลมฟ้าอากาศ
+en	geography	geography
+ja	geography	地理学
+zh	geography	地理學
+ko	geography	지리학
+es	geography	geografía
+pt	geography	geografia
+fr	geography	géographie
+de	geography	Geographie
+it	geography	geografia
+ru	geography	география
+ar	geography	جغرافيا
+hi	geography	भूगोल
+id	geography	geografi
+tr	geography	coğrafya
+th	geography	ภูมิศาสตร์
+en	architecture	architecture
+ja	architecture	建築
+zh	architecture	建筑
+ko	architecture	건축
+es	architecture	arquitectura
+pt	architecture	arquitetura
+fr	architecture	architecture
+de	architecture	Architektur
+it	architecture	architettura
+ru	architecture	архитектура
+ar	architecture	عمارة
+hi	architecture	वास्तुशास्त्र
+id	architecture	arsitektur
+tr	architecture	mimarlık
+th	architecture	สถาปัตยกรรม
+en	games	game
+ja	games	ゲーム
+zh	games	遊戲
+ko	games	게임
+es	games	juego
+pt	games	jogo
+fr	games	jeu
+de	games	Spiel
+it	games	gioco
+ru	games	игра
+ar	games	لعب
+hi	games	क्रीडा
+id	games	permainan
+tr	games	oyun
+th	games	เกม
+en	hobbies	hobby
+ja	hobbies	趣味
+zh	hobbies	爱好
+ko	hobbies	취미
+es	hobbies	afición
+pt	hobbies	hobby
+fr	hobbies	hobby
+de	hobbies	Hobby
+it	hobbies	hobby
+ru	hobbies	хобби
+ar	hobbies	هواية
+hi	hobbies	रुचि
+id	hobbies	hobi
+tr	hobbies	hobi
+th	hobbies	งานอดิเรก
+en	agriculture	agriculture
+ja	agriculture	農業
+zh	agriculture	农业
+ko	agriculture	농업
+es	agriculture	agricultura
+pt	agriculture	agricultura
+fr	agriculture	agriculture
+de	agriculture	Landwirtschaft
+it	agriculture	agricoltura
+ru	agriculture	сельское хозяйство
+ar	agriculture	زراعة
+hi	agriculture	कृषि
+id	agriculture	pertanian
+tr	agriculture	tarım
+th	agriculture	เกษตรกรรม
+en	plants	plant
+ja	plants	植物
+zh	plants	植物
+ko	plants	식물
+es	plants	planta
+pt	plants	plantas
+fr	plants	plante
+de	plants	Pflanzen
+it	plants	piante
+ru	plants	растения
+ar	plants	نباتات
+hi	plants	पादप
+id	plants	tumbuhan
+tr	plants	bitki
+th	plants	พืช
+en	animals	animal
+ja	animals	動物
+zh	animals	动物界
+ko	animals	동물
+pt	animals	Animalia
+fr	animals	animal
+de	animals	Tier
+it	animals	animale
+ru	animals	животные
+ar	animals	حيوانات
+hi	animals	प्राणी
+id	animals	hewan
+tr	animals	hayvan
+th	animals	สัตว์
+en	culture	culture
+ja	culture	文化
+zh	culture	文化
+ko	culture	문화
+es	culture	cultura
+pt	culture	cultura
+fr	culture	culture
+de	culture	Kultur
+it	culture	cultura
+ru	culture	культура
+ar	culture	ثقافة
+hi	culture	संस्कृति
+id	culture	budaya
+tr	culture	kültür
+th	culture	วัฒนธรรม
+en	economics	economics
+ja	economics	経済学
+zh	economics	经济学
+ko	economics	경제학
+es	economics	ciencia económica
+pt	economics	ciência economia
+fr	economics	science économique
+de	economics	Wirtschaftswissenschaft
+it	economics	scienze economiche
+ru	economics	экономика
+ar	economics	اقتصاد
+hi	economics	अर्थशास्त्र
+id	economics	ekonomi
+tr	economics	iktisat
+th	economics	เศรษฐศาสตร์
+en	education	education
+ja	education	教育
+zh	education	教育
+ko	education	교육
+es	education	educación
+pt	education	educação
+fr	education	éducation
+de	education	Ausbildung
+it	education	educazione
+ru	education	образование
+ar	education	تعليم
+hi	education	शिक्षा
+id	education	pendidikan
+tr	education	eğitim
+th	education	การศึกษา

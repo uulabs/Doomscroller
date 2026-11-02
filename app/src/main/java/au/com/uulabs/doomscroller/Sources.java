@@ -19,14 +19,9 @@ import java.util.regex.Pattern;
 import java.util.zip.GZIPInputStream;
 
 /**
- * The five supply surfaces, all keyless and serverless.
- *
- * Each returns candidate items for one randomly chosen subject. Nothing here
- * keeps a list of content; every call is generated from a word.
- *
- * Where a source only offers a provider-hosted player, [Item.kind] is "web"
- * and the WebView loads the provider's own documented embed. Where a source
- * hands over a real stream, kind is "mp4" and it plays natively.
+ * Keyless discovery for six providers. Meta draws from a bundled public URL
+ * cache, then live indexes when exhausted. Only original provider media is
+ * resolved and played; archived media and layout dimensions are never used.
  */
 public final class Sources {
 
@@ -75,9 +70,39 @@ public final class Sources {
     private Sources() {
     }
 
+    private static boolean reelCacheLoaded;
+
+    /** The same broad, auditable cold-start cache is used in every build type. */
+    public static synchronized void loadReelCache(InputStream input) throws IOException {
+        try (java.io.BufferedReader reader = new java.io.BufferedReader(
+                new java.io.InputStreamReader(input, "UTF-8"))) {
+            if (reelCacheLoaded) return;
+            Set<String> facebook = new HashSet<>(), instagram = new HashSet<>();
+            String line;
+            int rows = 0;
+            while ((line = reader.readLine()) != null && rows < 20000) {
+                if (line.startsWith("#")) continue;
+                String[] fields = line.split("\\t", 2);
+                if (fields.length != 2) continue;
+                if (FACEBOOK.equals(fields[0]) && fields[1].matches("[0-9]{6,}")) facebook.add(fields[1]);
+                else if (INSTAGRAM.equals(fields[0]) && fields[1].matches("[A-Za-z0-9_-]{5,}")) instagram.add(fields[1]);
+                rows++;
+            }
+            List<String> f = new ArrayList<>(facebook), i = new ArrayList<>(instagram);
+            Collections.shuffle(f); Collections.shuffle(i);
+            FB_POOL.addAll(f); IG_POOL.addAll(i);
+            fbAvailable = FB_POOL.size(); igAvailable = IG_POOL.size();
+            reelCacheLoaded = true;
+        }
+    }
+
     // ------------------------------------------------------------------ http
 
     private static String get(String url, String cookie) throws IOException {
+        return get(url, cookie, false);
+    }
+
+    private static String get(String url, String cookie, boolean requireSuccess) throws IOException {
         HttpURLConnection c = (HttpURLConnection) new URL(url).openConnection();
         c.setConnectTimeout(12000);
         c.setReadTimeout(20000);
@@ -89,6 +114,10 @@ public final class Sources {
             c.setRequestProperty("Cookie", cookie);
         }
         int code = c.getResponseCode();
+        if (requireSuccess && code != 200) {
+            c.disconnect();
+            throw new IOException("Search index HTTP " + code);
+        }
         InputStream in = code >= 400 ? c.getErrorStream() : c.getInputStream();
         if (in == null) {
             c.disconnect();
@@ -142,28 +171,115 @@ public final class Sources {
         return Collections.emptyList();
     }
 
+    private static final java.util.concurrent.atomic.AtomicLongArray indexBlockedUntil =
+            new java.util.concurrent.atomic.AtomicLongArray(3);
+
+    /** Delay only when every selected source is currently waiting to retry. */
+    public static long retryDelayMillis(Set<String> enabled) {
+        long now = System.currentTimeMillis();
+        long earliest = Long.MAX_VALUE;
+        for (String source : enabled) {
+            long readyAt;
+            if (FACEBOOK.equals(source)) {
+                if (fbAvailable > 0) return 0;
+                readyAt = Math.max(fbBlockedUntil, fbFreshAt + 5000L);
+            } else if (INSTAGRAM.equals(source)) {
+                if (igAvailable > 0) return 0;
+                readyAt = Math.max(igBlockedUntil, igFreshAt + 5000L);
+            } else return 0;
+            readyAt = Math.max(readyAt, Math.min(indexBlockedUntil.get(2), Math.min(indexBlockedUntil.get(0), indexBlockedUntil.get(1))));
+            earliest = Math.min(earliest, readyAt);
+        }
+        return earliest == Long.MAX_VALUE ? 2000 : Math.max(0, earliest - now);
+    }
+
+    /** Independent public indexes; never retry a blocked index in a tight loop. */
+    private static String reelSearch(String host, String word) throws IOException {
+        String query = enc("site:" + host + "/reel " + word);
+        String[] indexes = {"https://search.brave.com/search?q=",
+                "https://html.duckduckgo.com/html/?q="};
+        Pattern direct = Pattern.compile(Pattern.quote(host) + "/reel/[A-Za-z0-9_-]{5,}");
+        for (int i = 0; i < indexes.length; i++) {
+            long now = System.currentTimeMillis();
+            if (now < indexBlockedUntil.get(i)) continue;
+            try {
+                String html = get(indexes[i] + query, null, true);
+                // DuckDuckGo wraps destinations in percent-encoded uddg links.
+                StringBuilder decoded = new StringBuilder(html);
+                Matcher links = Pattern.compile("uddg=([^&\"<> ]+)").matcher(html);
+                while (links.find()) {
+                    try { decoded.append(' ').append(java.net.URLDecoder.decode(links.group(1), "UTF-8")); }
+                    catch (IllegalArgumentException ignored) { }
+                }
+                if (direct.matcher(decoded).find()) return decoded.toString();
+            } catch (IOException unavailable) {
+                indexBlockedUntil.set(i, now + 10 * 60_000L);
+            }
+        }
+        long now = System.currentTimeMillis();
+        if (now >= indexBlockedUntil.get(2)) {
+            try {
+                String links = archiveReels(host);
+                indexBlockedUntil.set(2, now + 15_000L);
+                return links;
+            } catch (IOException unavailable) {
+                if (!Thread.currentThread().isInterrupted())
+                    indexBlockedUntil.set(2, now + 10 * 60_000L);
+            }
+        }
+        return "";
+    }
+
+    private static final java.util.Map<String, Integer> archivePages = new java.util.HashMap<>();
+    private static final java.util.Map<String, Long> archivePagesAt = new java.util.HashMap<>();
+    private static final java.util.Map<String, Integer> lastArchivePage = new java.util.HashMap<>();
+
+    /** The public CDX API supplies URLs, never archived media. Resolve each URL live. */
+    private static String archiveReels(String host) throws IOException {
+        String base = "https://web.archive.org/cdx/search/cdx?url="
+                + enc("www." + host + "/reel/*") + "&pageSize=1";
+        long now = System.currentTimeMillis();
+        Integer count = archivePages.get(host);
+        if (count == null || now - archivePagesAt.getOrDefault(host, 0L) > 6 * 60 * 60_000L) {
+            String number = get(base + "&showNumPages=true", null, true).trim();
+            try { count = Integer.parseInt(number); }
+            catch (NumberFormatException invalid) { throw new IOException("Invalid CDX page count"); }
+            if (count <= 0 || count > 10_000_000) throw new IOException("Empty CDX index");
+            archivePages.put(host, count); archivePagesAt.put(host, now);
+        }
+        int page = java.util.concurrent.ThreadLocalRandom.current().nextInt(count);
+        Integer previous = lastArchivePage.get(host);
+        if (count > 1 && previous != null && page == previous) page = (page + 1) % count;
+        String body = get(base + "&page=" + page
+                + "&output=json&filter=statuscode%3A200&collapse=urlkey&fl=original&limit=1000", null, true);
+        try {
+            JSONArray rows = new JSONArray(body);
+            StringBuilder links = new StringBuilder();
+            for (int i = 1; i < rows.length(); i++) {
+                JSONArray row = rows.optJSONArray(i);
+                if (row != null && row.length() > 0) links.append(row.optString(0)).append('\n');
+            }
+            lastArchivePage.put(host, page);
+            return links.toString();
+        } catch (org.json.JSONException invalid) { throw new IOException("Invalid CDX results", invalid); }
+    }
+
     // -------------------------------------------------------------- facebook
 
     private static final java.util.ArrayDeque<String> FB_POOL =
             new java.util.ArrayDeque<String>();
-    private static long fbFreshAt;
-    private static long fbBlockedUntil;
+    private static volatile int fbAvailable;
+    private static volatile long fbFreshAt;
+    private static volatile long fbBlockedUntil;
 
     /** Reels found the same way as Instagram's: permalinks from a search index. */
     private static List<Item> facebook(String word) throws IOException {
         long now = System.currentTimeMillis();
-        if (BuildConfig.DEBUG && FB_POOL.isEmpty()) {
-            for (String seed : new String[]{"1150644675873413",
-                    "1157802012206431"}) {
-                FB_POOL.addLast(seed);
-            }
-        }
-        if (FB_POOL.isEmpty() && now > fbBlockedUntil && now - fbFreshAt > 60_000L) {
+        if (FB_POOL.isEmpty() && now > fbBlockedUntil && now - fbFreshAt > 5000L) {
             fbFreshAt = now;
             try {
-                String html = get("https://search.brave.com/search?q="
-                        + enc("site:facebook.com/reel " + word), null);
-                Matcher m = Pattern.compile("facebook\\\\.com/reel/([0-9]{6,})")
+                String html = reelSearch("facebook.com", word);
+                Matcher m = Pattern.compile("facebook\\.com/reel/([0-9]{6,})")
                         .matcher(html);
                 Set<String> seen = new HashSet<String>();
                 while (m.find()) {
@@ -172,7 +288,7 @@ public final class Sources {
                     }
                 }
                 if (FB_POOL.isEmpty()) {
-                    fbBlockedUntil = now + 10 * 60_000L;
+                    fbBlockedUntil = now + 5000L;
                 }
             } catch (IOException e) {
                 fbBlockedUntil = now + 10 * 60_000L;
@@ -180,7 +296,8 @@ public final class Sources {
         }
         List<Item> out = new ArrayList<Item>();
         java.util.Random random = new java.util.Random();
-        for (int i = 0; i < 6 && !FB_POOL.isEmpty(); i++) {
+        // produce() consumes one resolved item; retain the other pooled links.
+        for (int i = 0; i < 1 && !FB_POOL.isEmpty(); i++) {
             int skip = random.nextInt(FB_POOL.size());
             String id = null;
             java.util.Iterator<String> it = FB_POOL.iterator();
@@ -196,6 +313,7 @@ public final class Sources {
                 out.add(new Item(FACEBOOK, id, "", "fbprobe", "", 0, 0));
             }
         }
+        fbAvailable = FB_POOL.size();
         return out;
     }
 
@@ -234,16 +352,33 @@ public final class Sources {
         return out;
     }
 
+    /** Null permits the browser fallback; empty means the public embed offers no playable media. */
+    public static String instagramMedia(String id) {
+        try {
+            String html = get("https://www.instagram.com/reel/" + id + "/embed/", null, true);
+            int key = html.indexOf("video_url");
+            if (key >= 0) {
+                int colon = html.indexOf(':', key);
+                int start = html.indexOf('"', colon + 1);
+                int end = html.indexOf('"', start + 1);
+                if (colon >= 0 && start >= 0 && end > start) {
+                    String media = unescapeJsonUrl(html.substring(start + 1, end));
+                    if (media.startsWith("https://")) return media;
+                }
+            }
+            // A watch-on-Instagram link is not a playable embed. Do not hold the
+            // entire feed for twenty seconds trying to click through that page.
+            if (html.contains("WatchOnInstagramContainer") || html.contains("may have been removed")) return "";
+        } catch (IOException unavailable) { return ""; }
+        return null;
+    }
+
     // ------------------------------------------------------------- instagram
 
     /**
-     * Reels have no anonymous discovery of their own: tag and profile pages hit
-     * a login wall. A general search index still carries permalinks, so a reel
-     * is found by asking for its host and path together with a subject, then
-     * played through Instagram's own embed, which renders without an account.
-     *
-     * The index is not fresh, so dead links are expected; the player treats
-     * Instagram's "post may have been removed" page as an ended clip.
+     * The cold-start cache and public indexes carry permalinks, not streams.
+     * Every permalink is resolved again against the current public embed.
+     * Dead/private/non-embeddable posts are expected and skipped before admission.
      */
     /**
      * Discovered reels are pooled rather than fetched per draw. The search index
@@ -252,26 +387,18 @@ public final class Sources {
      */
     private static final java.util.ArrayDeque<String> IG_POOL =
             new java.util.ArrayDeque<String>();
-    private static long igFreshAt;
-    private static long igBlockedUntil;
+    private static volatile int igAvailable;
+    private static volatile long igFreshAt;
+    private static volatile long igBlockedUntil;
 
     private static List<Item> instagram(String word) throws IOException {
         long now = System.currentTimeMillis();
-        if (BuildConfig.DEBUG && IG_POOL.isEmpty()) {
-            // Debug builds carry a few known-live reels so the extractor can be
-            // exercised while the search index is resting.
-            for (String seed : new String[]{"DRFTariCNvG", "Da-j9XJM6BM",
-                    "DXNIVYtj6CV", "DPMrABMjy1h"}) {
-                IG_POOL.addLast(seed);
-            }
-        }
         if (IG_POOL.isEmpty() && now > igBlockedUntil
-                && now - igFreshAt > 60_000L) {
+                && now - igFreshAt > 5000L) {
             igFreshAt = now;
             try {
-                String query = "site:instagram.com/reel " + word;
-                String html = get("https://search.brave.com/search?q=" + enc(query), null);
-                Matcher m = Pattern.compile("instagram\\\\.com/reel/([A-Za-z0-9_-]{5,})")
+                String html = reelSearch("instagram.com", word);
+                Matcher m = Pattern.compile("instagram\\.com/reel/([A-Za-z0-9_-]{5,})")
                         .matcher(html);
                 Set<String> seen = new HashSet<String>();
                 while (m.find()) {
@@ -282,7 +409,7 @@ public final class Sources {
                 }
                 if (IG_POOL.isEmpty()) {
                     // Throttled or nothing indexed for this subject: rest a while.
-                    igBlockedUntil = now + 10 * 60_000L;
+                    igBlockedUntil = now + 5000L;
                 }
             } catch (IOException e) {
                 igBlockedUntil = now + 10 * 60_000L;
@@ -291,7 +418,8 @@ public final class Sources {
         List<Item> out = new ArrayList<Item>();
         Set<String> taken = new HashSet<String>();
         java.util.Random random = new java.util.Random();
-        for (int i = 0; i < 6 && !IG_POOL.isEmpty(); i++) {
+        // Do not discard five unused discoveries after one successful resolution.
+        for (int i = 0; i < 1 && !IG_POOL.isEmpty(); i++) {
             int skip = random.nextInt(IG_POOL.size());
             String id = null;
             java.util.Iterator<String> it = IG_POOL.iterator();
@@ -308,6 +436,7 @@ public final class Sources {
                         "https://www.instagram.com/reel/" + id + "/embed/", 0, 0));
             }
         }
+        igAvailable = IG_POOL.size();
         return out;
     }
 
@@ -371,7 +500,7 @@ public final class Sources {
             }
             out.add(new Item(TIKTOK, id, "", "frame",
                     "https://www.tiktok.com/player/v1/" + id
-                            + "?autoplay=1&loop=0&music_info=0&description=0", 0, 0));
+                            + "?autoplay=1&loop=0&controls=0&music_info=0&description=0", 0, 0));
         }
         if (!out.isEmpty()) {
             return out;
@@ -393,7 +522,7 @@ public final class Sources {
             }
             out.add(new Item(TIKTOK, id, "", "frame",
                     "https://www.tiktok.com/player/v1/" + id
-                            + "?autoplay=1&loop=0&music_info=0&description=0", 0, 0));
+                            + "?autoplay=1&loop=0&controls=0&music_info=0&description=0", 0, 0));
         }
         Collections.shuffle(out);
         return out;

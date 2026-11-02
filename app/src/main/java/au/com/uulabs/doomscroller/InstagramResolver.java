@@ -1,7 +1,6 @@
 package au.com.uulabs.doomscroller;
 
 import android.app.Activity;
-import android.webkit.ValueCallback;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
@@ -45,10 +44,17 @@ final class InstagramResolver {
                     + "return '';}catch(e){return '';}})()";
 
     private final Activity activity;
-    private final Object lock = new Object();
-    private WebView web;
-    private String found;
-    private boolean done;
+    private final android.os.Handler handler = new android.os.Handler(android.os.Looper.getMainLooper());
+    private volatile boolean destroyed;
+    private volatile Request current;
+
+    // Each asynchronous callback belongs to one request, never to shared result state.
+    private static final class Request {
+        volatile boolean done;
+        String found;
+        boolean polling;
+        WebView web; // main thread only
+    }
 
     InstagramResolver(Activity activity) {
         this.activity = activity;
@@ -56,94 +62,98 @@ final class InstagramResolver {
 
     /** Blocking, so it must not be called on the main thread. */
     String resolveBlocking(final String reelId, long timeoutMs) {
-        synchronized (lock) {
-            found = null;
-            done = false;
-        }
-        activity.runOnUiThread(new Runnable() {
-            @Override
-            public void run() {
-                WebView w = new WebView(activity);
-                WebSettings s = w.getSettings();
-                s.setJavaScriptEnabled(true);
-                s.setDomStorageEnabled(true);
-                s.setMediaPlaybackRequiresUserGesture(false);
-                s.setUserAgentString("Mozilla/5.0 (Linux; Android 15; Pixel 8) "
-                        + "AppleWebKit/537.36 (KHTML, like Gecko) "
-                        + "Chrome/155.0.0.0 Mobile Safari/537.36");
-                w.setWebViewClient(new WebViewClient() {
-                    @Override
-                    public void onPageFinished(WebView view, String url) {
-                        poll(view, 0);
-                    }
-                });
-                web = w;
-                w.loadUrl("https://www.instagram.com/reel/" + reelId + "/embed/");
+        if (destroyed) return null;
+        final Request request = new Request();
+        current = request;
+        handler.post(() -> {
+            if (destroyed || request.done || activity.isFinishing()) {
+                finish(request, null);
+                return;
             }
-        });
-
-        long deadline = System.currentTimeMillis() + timeoutMs;
-        synchronized (lock) {
-            while (!done) {
-                long left = deadline - System.currentTimeMillis();
-                if (left <= 0) {
-                    break;
-                }
-                try {
-                    lock.wait(Math.min(left, 250));
-                } catch (InterruptedException e) {
-                    break;
-                }
-            }
-            String result = found;
-            activity.runOnUiThread(new Runnable() {
-                @Override
-                public void run() {
-                    if (web != null) {
-                        try {
-                            web.destroy();
-                        } catch (Exception ignored) {
-                        }
-                        web = null;
-                    }
+            WebView w = new WebView(activity);
+            request.web = w;
+            WebSettings s = w.getSettings();
+            s.setJavaScriptEnabled(true);
+            s.setDomStorageEnabled(true);
+            s.setMediaPlaybackRequiresUserGesture(false);
+            s.setUserAgentString("Mozilla/5.0 (Linux; Android 15; Pixel 8) "
+                    + "AppleWebKit/537.36 (KHTML, like Gecko) "
+                    + "Chrome/155.0.0.0 Mobile Safari/537.36");
+            w.setWebViewClient(new WebViewClient() {
+                @Override public void onPageFinished(WebView view, String url) {
+                    if (request.done || destroyed || request.polling) return;
+                    request.polling = true;
+                    handler.removeCallbacksAndMessages(request);
+                    poll(request, 0);
                 }
             });
-            return result;
+            w.loadUrl("https://www.instagram.com/reel/" + reelId + "/embed/");
+        });
+        long deadline = android.os.SystemClock.elapsedRealtime() + timeoutMs;
+        String result;
+        synchronized (request) {
+            while (!request.done && !destroyed) {
+                long left = deadline - android.os.SystemClock.elapsedRealtime();
+                if (left <= 0) break;
+                try { request.wait(left); }
+                catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    break;
+                }
+            }
+            request.done = true;
+            result = request.found;
+        }
+        // Captures this request's WebView. Cleanup cannot destroy the next one.
+        handler.post(() -> close(request));
+        if (current == request) current = null;
+        return result;
+    }
+
+    private void finish(Request request, String value) {
+        synchronized (request) {
+            if (request.done) return;
+            request.found = value;
+            request.done = true;
+            request.notifyAll();
         }
     }
 
-    private void poll(final WebView view, final int attempt) {
-        synchronized (lock) {
-            if (done) {
+    private void close(Request request) {
+        handler.removeCallbacksAndMessages(request);
+        if (request.web != null) {
+            request.web.stopLoading();
+            request.web.destroy();
+            request.web = null;
+        }
+    }
+
+    private void poll(final Request request, final int attempt) {
+        if (request.done || destroyed || request.web == null) return;
+        if (attempt > 40) { finish(request, null); return; }
+        request.web.evaluateJavascript(PROBE_JS, value -> {
+            if (request.done || destroyed) return;
+            String candidate = "";
+            try {
+                Object decoded = new org.json.JSONTokener(value == null ? "null" : value).nextValue();
+                if (decoded instanceof String) candidate = ((String) decoded).trim();
+            } catch (org.json.JSONException ignored) { }
+            if (candidate.startsWith("https://") || candidate.startsWith("http://")) {
+                finish(request, candidate);
                 return;
             }
-        }
-        if (attempt > 40) {
-            return;
-        }
-        view.evaluateJavascript(PROBE_JS, new ValueCallback<String>() {
-            @Override
-            public void onReceiveValue(String value) {
-                String candidate = value == null ? "" : value.replace("\"", "").trim();
-                // The page data escapes the separators of its own URL.
-                candidate = candidate.replace("\\u0026", "&").replace("\\/", "/");
-                if (candidate.startsWith("http")) {
-                    synchronized (lock) {
-                        if (!done) {
-                            found = candidate;
-                            done = true;
-                            lock.notifyAll();
-                        }
-                    }
-                    return;
-                }
-                view.postDelayed(new Runnable() {
-                    @Override
-                    public void run() {
-                        poll(view, attempt + 1);
-                    }
-                }, 500);
-            }
+            handler.postAtTime(() -> poll(request, attempt + 1), request,
+                    android.os.SystemClock.uptimeMillis() + 500);
         });
+    }
+
+    /** Called on the main thread when the owning Activity is destroyed. */
+    void destroy() {
+        destroyed = true;
+        Request request = current;
+        if (request != null) {
+            finish(request, null);
+            close(request);
+        }
     }
 }

@@ -1,0 +1,133 @@
+{
+  "retrieved": "2026-11-02T21:14:51.066196+00:00",
+  "seed": 20261102,
+  "source": "https://web.archive.org/cdx/search/cdx",
+  "sampling": "one random page per equal index band",
+  "providers": {
+    "Instagram": {
+      "indexPages": 8741,
+      "entries": 6000,
+      "sampledPages": [
+        {
+          "page": 7937,
+          "url": "https://web.archive.org/cdx/search/cdx?url=www.instagram.com%2Freel%2F%2A&pageSize=1&page=7937&output=json&filter=statuscode%3A200&collapse=urlkey&fl=original%2Ctimestamp&limit=1000",
+          "sha256": "3cbb535ec47214a70507e29534509d6fcb115753c57d0ec404e5fff214cf329f",
+          "uniqueAdded": 453
+        },
+        {
+          "page": 7492,
+          "url": "https://web.archive.org/cdx/search/cdx?url=www.instagram.com%2Freel%2F%2A&pageSize=1&page=7492&output=json&filter=statuscode%3A200&collapse=urlkey&fl=original%2Ctimestamp&limit=1000",
+          "sha256": "bf741886deb09e7ebf4edf32dbd0c05798b3048428f0190fe8e623bc7a64db33",
+          "uniqueAdded": 637
+        },
+        {
+          "page": 8679,
+          "url": "https://web.archive.org/cdx/search/cdx?url=www.instagram.com%2Freel%2F%2A&pageSize=1&page=8679&output=json&filter=statuscode%3A200&collapse=urlkey&fl=original%2Ctimestamp&limit=1000",
+          "sha256": "c8b02f832a78a85178087039bb09135c6ce54a8abbbcc2a6bdc90bb8d715549e",
+          "uniqueAdded": 0
+        },
+        {
+          "page": 5337,
+          "url": "https://web.archive.org/cdx/search/cdx?url=www.instagram.com%2Freel%2F%2A&pageSize=1&page=5337&output=json&filter=statuscode%3A200&collapse=urlkey&fl=original%2Ctimestamp&limit=1000",
+          "sha256": "4e3e78d3148e9c966d3d5e82a16faf2868b42135e83bf33e62dfe1ca35e7be81",
+          "uniqueAdded": 429
+        },
+        {
+          "page": 1784,
+          "url": "https://web.archive.org/cdx/search/cdx?url=www.instagram.com%2Freel%2F%2A&pageSize=1&page=1784&output=json&filter=statuscode%3A200&collapse=urlkey&fl=original%2Ctimestamp&limit=1000",
+          "sha256": "798f1426a7383fb00517f8541accf2ff54b5b67c1f5a8dbbac58ff335ead902b",
+          "uniqueAdded": 341
+        },
+        {
+          "page": 5049,
+          "url": "https://web.archive.org/cdx/search/cdx?url=www.instagram.com%2Freel%2F%2A&pageSize=1&page=5049&output=json&filter=statuscode%3A200&collapse=urlkey&fl=original%2Ctimestamp&limit=1000",
+          "sha256": "cab078e93aa68090582f8ddc8c439e9f4d652dcfec61efda70893333dd444d51",
+          "uniqueAdded": 424
+        },
+        {
+          "page": 4634,
+          "url": "https://web.archive.org/cdx/search/cdx?url=www.instagram.com%2Freel%2F%2A&pageSize=1&page=4634&output=json&filter=statuscode%3A200&collapse=urlkey&fl=original%2Ctimestamp&limit=1000",
+          "sha256": "4abd803ec01ed01fa42c55a31338f93ef43012168a5f43931d2961c1410ef014",
+          "uniqueAdded": 439
+        },
+        {
+          "page": 4213,
+          "url": "https://web.archive.org/cdx/search/cdx?url=www.instagram.com%2Freel%2F%2A&pageSize=1&page=4213&output=json&filter=statuscode%3A200&collapse=urlkey&fl=original%2Ctimestamp&limit=1000",
+          "sha256": "e8f52a26774aa2f4a9d25163cbffac0c35e3e952a6ff9dd57db5308109e7c226",
+          "uniqueAdded": 492
+        },
+        {
+          "page": 8238,
+          "url": "https://web.archive.org/cdx/search/cdx?url=www.instagram.com%2Freel%2F%2A&pageSize=1&page=8238&output=json&filter=statuscode%3A200&collapse=urlkey&fl=original%2Ctimestamp&limit=1000",
+          "sha256": "5f737fd8a06d74aa5ad3a9fdf14d4d28c075bff87ca9666219b530b517d869d3",
+          "uniqueAdded": 480
+        },
+        {
+          "page": 7205,
+          "url": "https://web.archive.org/cdx/search/cdx?url=www.instagram.com%2Freel%2F%2A&pageSize=1&page=7205&output=json&filter=statuscode%3A200&collapse=urlkey&fl=original%2Ctimestamp&limit=1000",
+          "sha256": "1c19355921d4019f8cc41781e5cebe59eac1bdd285f0b4d64c15e18db8c48c95",
+          "uniqueAdded": 628
+        },
+        {
+          "page": 2935,
+          "url": "https://web.archive.org/cdx/search/cdx?url=www.instagram.com%2Freel%2F%2A&pageSize=1&page=2935&output=json&filter=statuscode%3A200&collapse=urlkey&fl=original%2Ctimestamp&limit=1000",
+          "sha256": "0c132db29d88c8c171b91302e0a7ffab6a0e581736052405557712641b104049",
+          "uniqueAdded": 373
+        },
+        {
+          "page": 3609,
+          "url": "https://web.archive.org/cdx/search/cdx?url=www.instagram.com%2Freel%2F%2A&pageSize=1&page=3609&output=json&filter=statuscode%3A200&collapse=urlkey&fl=original%2Ctimestamp&limit=1000",
+          "sha256": "5d30b764f190ced59594325bcb005e8ca1bac864027e0cc5c2b4314e75b07b99",
+          "uniqueAdded": 373
+        },
+        {
+          "page": 1902,
+          "url": "https://web.archive.org/cdx/search/cdx?url=www.instagram.com%2Freel%2F%2A&pageSize=1&page=1902&output=json&filter=statuscode%3A200&collapse=urlkey&fl=original%2Ctimestamp&limit=1000",
+          "sha256": "9bc81cfd39c635dc2fd6ad754d195a7725fd66ba163aa1e195662fbb8a8cd743",
+          "uniqueAdded": 469
+        },
+        {
+          "page": 2761,
+          "url": "https://web.archive.org/cdx/search/cdx?url=www.instagram.com%2Freel%2F%2A&pageSize=1&page=2761&output=json&filter=statuscode%3A200&collapse=urlkey&fl=original%2Ctimestamp&limit=1000",
+          "sha256": "a017a128a09464ac820da2c59970aa8d0e863d0bfe8a6e8f508db4e96fdc5e0b",
+          "uniqueAdded": 342
+        },
+        {
+          "page": 5561,
+          "url": "https://web.archive.org/cdx/search/cdx?url=www.instagram.com%2Freel%2F%2A&pageSize=1&page=5561&output=json&filter=statuscode%3A200&collapse=urlkey&fl=original%2Ctimestamp&limit=1000",
+          "sha256": "8cb9fc2fd7bf697f950da7772e0ba9787e15c95f8c04aaab9ac860429e190fb6",
+          "uniqueAdded": 548
+        }
+      ]
+    },
+    "Facebook": {
+      "indexPages": 924,
+      "entries": 2181,
+      "sampledPages": [
+        {
+          "page": 21,
+          "url": "https://web.archive.org/cdx/search/cdx?url=www.facebook.com%2Freel%2F%2A&pageSize=1&page=21&output=json&filter=statuscode%3A200&collapse=urlkey&fl=original%2Ctimestamp&limit=1000",
+          "sha256": "7ffa3f33c07c68385c138c1fc3be406dc47191c01501d47ce98e9b251b1d6da0",
+          "uniqueAdded": 747
+        },
+        {
+          "page": 246,
+          "url": "https://web.archive.org/cdx/search/cdx?url=www.facebook.com%2Freel%2F%2A&pageSize=1&page=246&output=json&filter=statuscode%3A200&collapse=urlkey&fl=original%2Ctimestamp&limit=1000",
+          "sha256": "03b57ce5ae912b9441d8d59cab82f3c891468905ce3b304595fc32775c987278",
+          "uniqueAdded": 650
+        },
+        {
+          "page": 474,
+          "url": "https://web.archive.org/cdx/search/cdx?url=www.facebook.com%2Freel%2F%2A&pageSize=1&page=474&output=json&filter=statuscode%3A200&collapse=urlkey&fl=original%2Ctimestamp&limit=1000",
+          "sha256": "f6914fe29aa5124cad3c76fe3b4138591791f5d611d378f354ce32d7fed2f02c",
+          "uniqueAdded": 784
+        },
+        {
+          "page": 654,
+          "error": "<urlopen error _ssl.c:1064: The handshake operation timed out>"
+        }
+      ]
+    }
+  },
+  "assetSha256": "d4854ab39c762a82de781eb285184be1e75dc3a144ef2be03d5a5b84bd0bd271"
+}

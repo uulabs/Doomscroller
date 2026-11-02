@@ -1,4 +1,4 @@
-# Topic coverage and sampling (unpublished retry)
+# Topic coverage and sampling
 
 The app now bundles a multilingual topic catalogue from Wikidata's structured CC0 data. No requests to Wikidata are made by the app and no AI service, key or server is required at runtime. Labels are search subjects, not a catalogue of videos or creators.
 
@@ -38,3 +38,5 @@ Uncertain Latin-script title language stays unknown rather than defaulting to En
 Labels are not all equally natural search phrases. The catalogue contains objects, disciplines, activities, models and regional names, not just categories. Future expansion can add reviewed native phrase variants and more families without changing sampling. It does not claim all internet topics, uniform selection across all videos, or equal success from every provider. X still interprets subjects as account handles and TikTok's sitemap fallback is topic-independent; both are limitations of the existing discovery adapters. X and PeerTube default off on new installs; saved source choices are preserved.
 
 Debug `word.log` records language/family/concept/query; `play.log` retains the originating language/family when known, allowing discovery-versus-playback coverage audits. No signed stream URLs are included in these new records.
+
+Meta cold-start URLs are now drawn from a broad bundled public permalink cache independently of the sampled query. Localized broad labels apply to live-index fallback. See META-DISCOVERY.md for provenance and the resulting topic/language limitations.
