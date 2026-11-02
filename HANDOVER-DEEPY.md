@@ -164,3 +164,7 @@ Read-only project audit reports 1,542,942,720 allocated bytes across UUDoomscrol
 ## Publication authorization — 3 November 2026
 
 Owner identified the Xiaomi as a 15 Ultra and explicitly instructed “Publish please”. This authorizes publication of the unchanged verified local 0.1.28 candidate; it is not a statement that listening/30-swipe acceptance passed. Source hashes and both APK hashes were rechecked before publication. Earlier “do not publish yet” instructions in this chronological report are superseded by this owner authorization.
+
+## Published — 3 November 2026
+
+0.1.28 is public and verified as GitHub latest: https://github.com/uulabs/Doomscroller/releases/tag/v0.1.28 . Release source commit bd6e89c was pushed over the configured SSH remote. The three APK assets and SHA256SUMS were downloaded from the public release and matched local hashes. Receipt: `/Volumes/970P/UULabs/Artifacts/UUDoomscroller/0.1.28-local-candidate/published-receipt.json`. The earlier unpublished/release-blocked descriptions are historical and superseded. Publication followed the owner’s explicit instruction; no extra audible acceptance claim is implied. No new device interactions were needed for publication. The owned S98 lease was released; production 0.1.28 remains installed, and the force-stopped diagnostic app remains available for follow-up evidence.
