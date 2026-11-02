@@ -178,6 +178,8 @@ public class Main extends Activity {
 
     private void buildUi() {
         Vocab.load(getAssets());
+        applyOrientation();
+        Sources.setAllowLandscape(Prefs.landscapeAllowed(this));
         ytResolver = new YoutubeResolver(this);
         root = new FrameLayout(this);
         root.setBackgroundColor(Color.BLACK);
@@ -1513,10 +1515,27 @@ public class Main extends Activity {
         startActivity(Intent.createChooser(send, "Share to UU Downloader"));
     }
 
+    /**
+     * Landscape is only permitted when the person asked for it. When it is, the
+     * activity follows the phone's own rotation setting: with auto-rotate on it
+     * turns by itself, and with auto-rotate off Android offers its rotate
+     * button when the phone is tilted. Nothing here overrides the user.
+     */
+    private void applyOrientation() {
+        int wanted = Prefs.landscapeAllowed(this)
+                ? android.content.pm.ActivityInfo.SCREEN_ORIENTATION_USER
+                : android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT;
+        if (getRequestedOrientation() != wanted) {
+            setRequestedOrientation(wanted);
+        }
+    }
+
     private void toggleSettings() {
         if (settingsPanel != null) {
             root.removeView(settingsPanel);
             settingsPanel = null;
+            applyOrientation();
+            Sources.setAllowLandscape(Prefs.landscapeAllowed(this));
             if (active != null && active.player != null && !paused) {
                 active.player.play();
             }

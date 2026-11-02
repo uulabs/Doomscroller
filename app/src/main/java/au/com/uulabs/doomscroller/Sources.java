@@ -136,13 +136,23 @@ public final class Sources {
 
     // --------------------------------------------------------------- youtube
 
+    /** Set from the settings; landscape results are only asked for when allowed. */
+    private static boolean allowLandscape;
+
+    public static void setAllowLandscape(boolean allowed) {
+        allowLandscape = allowed;
+    }
+
     /**
-     * The Shorts filter (sp=EgIYAQ%3D%3D) keeps the results vertical. Playback
-     * uses YouTube's own embed, so no stream is ever extracted.
+     * The Shorts filter (sp=EgIYAQ%3D%3D) keeps the results vertical. It is
+     * dropped when landscape is permitted, because Shorts are portrait by
+     * definition and the filter would hide every landscape video. Playback uses
+     * YouTube's own stream either way.
      */
     private static List<Item> youtube(String word) throws IOException {
         String html = get("https://www.youtube.com/results?search_query=" + enc(word)
-                + "&sp=EgIYAQ%3D%3D", "SOCS=CAI; CONSENT=YES+cb");
+                + (allowLandscape ? "" : "&sp=EgIYAQ%3D%3D"),
+                "SOCS=CAI; CONSENT=YES+cb");
         Matcher m = Pattern.compile("\"videoId\":\"([A-Za-z0-9_-]{11})\"").matcher(html);
         List<Item> out = new ArrayList<Item>();
         Set<String> seen = new HashSet<String>();
