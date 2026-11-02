@@ -101,6 +101,8 @@ public class Main extends Activity {
     private LinearLayout controlsBar;
     private TextView controlsToggle;
     private TextView controlsTime;
+    private android.widget.SeekBar controlsSeek;
+    private boolean seeking;
     private long lastActivePing;
     /** +1 for a forward swap, -1 when going back, so motion matches the swipe. */
     private float swapDirection = 1f;
@@ -244,13 +246,16 @@ public class Main extends Activity {
         loading.addView(label);
         loadingView = loading;
         controlsBar = new LinearLayout(this);
-        controlsBar.setOrientation(LinearLayout.HORIZONTAL);
-        controlsBar.setGravity(Gravity.CENTER_VERTICAL);
+        controlsBar.setOrientation(LinearLayout.VERTICAL);
         GradientDrawable barBackground = new GradientDrawable();
         barBackground.setColor(0xE617171A);
         barBackground.setCornerRadius(dp(20));
         controlsBar.setBackground(barBackground);
-        controlsBar.setPadding(dp(18), dp(11), dp(18), dp(11));
+        controlsBar.setPadding(dp(18), dp(10), dp(18), dp(10));
+
+        LinearLayout barTop = new LinearLayout(this);
+        barTop.setOrientation(LinearLayout.HORIZONTAL);
+        barTop.setGravity(Gravity.CENTER_VERTICAL);
 
         controlsToggle = new TextView(this);
         controlsToggle.setText("\u25B6");
@@ -264,18 +269,55 @@ public class Main extends Activity {
                 updateControls();
             }
         });
-        controlsBar.addView(controlsToggle);
+        barTop.addView(controlsToggle);
 
         controlsTime = new TextView(this);
         controlsTime.setTextColor(Color.parseColor("#BBBBBB"));
         controlsTime.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f);
-        controlsBar.addView(controlsTime);
+        barTop.addView(controlsTime);
+        controlsBar.addView(barTop);
+
+        controlsSeek = new android.widget.SeekBar(this);
+        controlsSeek.setMax(1);
+        controlsSeek.setPadding(0, dp(2), 0, 0);
+        if (controlsSeek.getProgressDrawable() != null) {
+            controlsSeek.getProgressDrawable().setTint(0xFF66CCFF);
+        }
+        if (controlsSeek.getThumb() != null) {
+            controlsSeek.getThumb().setTint(0xFF66CCFF);
+        }
+        controlsSeek.setOnSeekBarChangeListener(
+                new android.widget.SeekBar.OnSeekBarChangeListener() {
+                    @Override
+                    public void onProgressChanged(android.widget.SeekBar seekBar,
+                                                  int progress, boolean fromUser) {
+                        if (fromUser && active != null && active.player != null) {
+                            active.player.seekTo(progress * 1000L);
+                            updateTimeLabel();
+                        }
+                    }
+
+                    @Override
+                    public void onStartTrackingTouch(android.widget.SeekBar seekBar) {
+                        seeking = true;
+                        handler.removeCallbacks(hideControls);
+                    }
+
+                    @Override
+                    public void onStopTrackingTouch(android.widget.SeekBar seekBar) {
+                        seeking = false;
+                        handler.postDelayed(hideControls, 2600);
+                    }
+                });
+        controlsBar.addView(controlsSeek, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
         controlsBar.setVisibility(View.GONE);
         FrameLayout.LayoutParams barParams = new FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        barParams.gravity = Gravity.BOTTOM | Gravity.LEFT;
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        barParams.gravity = Gravity.BOTTOM;
         barParams.leftMargin = dp(20);
+        barParams.rightMargin = dp(20);
         barParams.bottomMargin = dp(44);
         root.addView(controlsBar, barParams);
         // Keep the bar above the navigation bar rather than underneath it.
@@ -1639,10 +1681,33 @@ public class Main extends Activity {
             controlsTime.setText(active == null ? "" : "");
             return;
         }
-        Player player = active.player;
-        long duration = player.getDuration();
-        long position = player.getCurrentPosition();
-        controlsToggle.setText(player.isPlaying() ? "\u2016\u2016" : "\u25B6");
+        controlsToggle.setText(active.player.isPlaying() ? "\u2016\u2016" : "\u25B6");
+        long duration = active.player.getDuration();
+        if (duration > 0 && controlsSeek != null) {
+            int seconds = (int) (duration / 1000);
+            if (controlsSeek.getMax() != seconds) {
+                controlsSeek.setMax(seconds);
+            }
+            if (!seeking) {
+                controlsSeek.setProgress((int) (active.player.getCurrentPosition() / 1000));
+            }
+            controlsSeek.setEnabled(true);
+            controlsSeek.setAlpha(1f);
+        } else if (controlsSeek != null) {
+            // A provider page reports no duration, so there is nothing to scrub.
+            controlsSeek.setEnabled(false);
+            controlsSeek.setAlpha(0.35f);
+        }
+        updateTimeLabel();
+    }
+
+    private void updateTimeLabel() {
+        if (active == null || active.player == null) {
+            controlsTime.setText("");
+            return;
+        }
+        long duration = active.player.getDuration();
+        long position = active.player.getCurrentPosition();
         if (duration > 0) {
             controlsTime.setText(formatTime(position) + "   -" + formatTime(duration - position));
         } else {
