@@ -87,12 +87,10 @@ final class Updater {
         if (activity.isFinishing()) {
             return;
         }
-        new AlertDialog.Builder(activity)
-                .setTitle("Up to date")
-                .setMessage("You are running " + BuildConfig.VERSION_NAME
-                        + ", the latest published version.")
-                .setPositiveButton("OK", null)
-                .show();
+        AppDialog.show(activity, "Up to date",
+                "You are running " + BuildConfig.VERSION_NAME
+                        + ", the latest published version.",
+                "OK", null, null);
     }
 
     private static void offer(final Activity activity, String version,
@@ -100,23 +98,21 @@ final class Updater {
         if (activity.isFinishing()) {
             return;
         }
-        AlertDialog.Builder b = new AlertDialog.Builder(activity);
-        b.setTitle("UU Doomscroller " + version + " is available");
-        b.setMessage(apk != null
-                ? "Download and install it now?"
-                : "Open the release page to download it?");
-        b.setPositiveButton(apk != null ? "Download" : "Open", new DialogInterface.OnClickListener() {
-            @Override
-            public void onClick(DialogInterface d, int w) {
-                if (apk != null) {
-                    downloadAndInstall(activity, apk);
-                } else if (!page.isEmpty()) {
-                    activity.startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(page)));
-                }
-            }
-        });
-        b.setNegativeButton("Later", null);
-        b.show();
+        String body = apk != null
+                ? "A newer version is available. Download and install it now?"
+                : "A newer version is available. Open the release page to download it?";
+        AppDialog.show(activity, "UU Doomscroller " + version, body,
+                apk != null ? "Download" : "Open", new Runnable() {
+                    @Override
+                    public void run() {
+                        if (apk != null) {
+                            downloadAndInstall(activity, apk);
+                        } else if (!page.isEmpty()) {
+                            activity.startActivity(
+                                    new Intent(Intent.ACTION_VIEW, Uri.parse(page)));
+                        }
+                    }
+                }, "Later");
     }
 
     /** selfupdate only: fetch the APK and hand it to the system installer. */
