@@ -1288,8 +1288,8 @@ public class Main extends Activity {
         int h = stage.getHeight() > 0 ? stage.getHeight()
                 : getResources().getDisplayMetrics().heightPixels;
         v.animate().cancel();
-        v.setTranslationY(from * h * 0.18f);
-        v.setAlpha(0.35f);
+        v.setTranslationY(from * h);
+        v.setAlpha(0.6f);
         if (BuildConfig.DEBUG) try {
             java.io.FileOutputStream f = new java.io.FileOutputStream(
                     new java.io.File(getFilesDir(), "motion.log"), true);
@@ -1300,8 +1300,24 @@ public class Main extends Activity {
         v.animate()
                 .translationY(0f)
                 .alpha(1f)
-                .setDuration(200)
+                .setDuration(260)
                 .setInterpolator(new android.view.animation.DecelerateInterpolator())
+                .start();
+    }
+
+    /** Carries the current clip off the screen in the direction swiped. */
+    private void slideOut(final View v, float direction) {
+        if (v == null) {
+            return;
+        }
+        int h = stage.getHeight() > 0 ? stage.getHeight()
+                : getResources().getDisplayMetrics().heightPixels;
+        v.animate().cancel();
+        v.animate()
+                .translationY(direction * h)
+                .alpha(0.9f)
+                .setDuration(260)
+                .setInterpolator(new android.view.animation.AccelerateInterpolator())
                 .start();
     }
 
@@ -1328,7 +1344,14 @@ public class Main extends Activity {
 
     private void next() {
         if (pending == null) {
-            nudge(-swapDirection);
+            if (active != null) {
+                // Nothing is buffered yet, so the clip leaves the screen and the
+                // next one arrives when it is ready.
+                slideOut(active.rootView, -swapDirection);
+                // The clip is leaving, so the face may cover the wait instead of
+                // a black screen.
+                active.rendered = false;
+            }
             refreshLoading();
             // Nothing buffered: remember the swipe and swap as soon as a slot is
             // ready, so a fast scroll never appears to do nothing.
@@ -1354,14 +1377,30 @@ public class Main extends Activity {
             if (history.size() > 20) {
                 history.removeLast();
             }
+            // Audio stops at once, but the surface stays alive long enough to
+            // finish sliding out - releasing the player first would blank it
+            // mid-animation and the motion would be lost.
             if (old.player != null) {
-                old.player.stop();
-                old.player.release();
+                old.player.setVolume(0f);
+                old.player.pause();
             }
-            if (old.web != null) {
-                silenceAndDestroy(old.web);
+            if (old.rootView.getTranslationY() == 0f) {
+                slideOut(old.rootView, -swapDirection);
             }
-            stage.removeView(old.rootView);
+            final Slot going = old;
+            handler.postDelayed(new Runnable() {
+                @Override
+                public void run() {
+                    if (going.player != null) {
+                        going.player.stop();
+                        going.player.release();
+                    }
+                    if (going.web != null) {
+                        silenceAndDestroy(going.web);
+                    }
+                    stage.removeView(going.rootView);
+                }
+            }, 280);
         }
         active.rootView.setVisibility(View.VISIBLE);
         slideIn(active.rootView, swapDirection);
