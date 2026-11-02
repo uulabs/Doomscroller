@@ -35,8 +35,9 @@ public final class Sources {
     public static final String X = "X";
     public static final String PEERTUBE = "PeerTube";
     public static final String INSTAGRAM = "Instagram";
+    public static final String FACEBOOK = "Facebook";
 
-    public static final String[] ALL = {YOUTUBE, TIKTOK, X, PEERTUBE, INSTAGRAM};
+    public static final String[] ALL = {YOUTUBE, TIKTOK, X, PEERTUBE, INSTAGRAM, FACEBOOK};
 
     private static final String UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
             + "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
@@ -132,10 +133,105 @@ public final class Sources {
         if (INSTAGRAM.equals(source)) {
             return instagram(word);
         }
+        if (FACEBOOK.equals(source)) {
+            return facebook(word);
+        }
         if (PEERTUBE.equals(source)) {
             return peertube(word);
         }
         return Collections.emptyList();
+    }
+
+    // -------------------------------------------------------------- facebook
+
+    private static final java.util.ArrayDeque<String> FB_POOL =
+            new java.util.ArrayDeque<String>();
+    private static long fbFreshAt;
+    private static long fbBlockedUntil;
+
+    /** Reels found the same way as Instagram's: permalinks from a search index. */
+    private static List<Item> facebook(String word) throws IOException {
+        long now = System.currentTimeMillis();
+        if (BuildConfig.DEBUG && FB_POOL.isEmpty()) {
+            for (String seed : new String[]{"1150644675873413",
+                    "1157802012206431"}) {
+                FB_POOL.addLast(seed);
+            }
+        }
+        if (FB_POOL.isEmpty() && now > fbBlockedUntil && now - fbFreshAt > 60_000L) {
+            fbFreshAt = now;
+            try {
+                String html = get("https://search.brave.com/search?q="
+                        + enc("site:facebook.com/reel " + word), null);
+                Matcher m = Pattern.compile("facebook\\\\.com/reel/([0-9]{6,})")
+                        .matcher(html);
+                Set<String> seen = new HashSet<String>();
+                while (m.find()) {
+                    if (seen.add(m.group(1))) {
+                        FB_POOL.addLast(m.group(1));
+                    }
+                }
+                if (FB_POOL.isEmpty()) {
+                    fbBlockedUntil = now + 10 * 60_000L;
+                }
+            } catch (IOException e) {
+                fbBlockedUntil = now + 10 * 60_000L;
+            }
+        }
+        List<Item> out = new ArrayList<Item>();
+        java.util.Random random = new java.util.Random();
+        for (int i = 0; i < 6 && !FB_POOL.isEmpty(); i++) {
+            int skip = random.nextInt(FB_POOL.size());
+            String id = null;
+            java.util.Iterator<String> it = FB_POOL.iterator();
+            for (int k = 0; it.hasNext(); k++) {
+                String candidate = it.next();
+                if (k == skip) {
+                    id = candidate;
+                    it.remove();
+                    break;
+                }
+            }
+            if (id != null) {
+                out.add(new Item(FACEBOOK, id, "", "fbprobe", "", 0, 0));
+            }
+        }
+        return out;
+    }
+
+    /**
+     * Facebook's video plugin carries the mp4 URL in its own markup, so the
+     * stream can be read without a browser at all.
+     */
+    public static String facebookMedia(String id) {
+        try {
+            String href = java.net.URLEncoder.encode(
+                    "https://www.facebook.com/reel/" + id + "/", "UTF-8");
+            String html = get("https://www.facebook.com/plugins/video.php?href="
+                    + href + "&show_text=false", null);
+            Matcher m = Pattern.compile("\"sd_src\":\"([^\"]+)\"")
+                    .matcher(html);
+            if (m.find()) {
+                return unescapeJsonUrl(m.group(1));
+            }
+        } catch (Exception ignored) {
+        }
+        return null;
+    }
+
+    /**
+     * The plugin page escapes its own JSON, sometimes twice over, so a single
+     * pass leaves stray backslashes and the CDN rejects the request. Ampersands
+     * are restored first, then any remaining backslash is dropped.
+     */
+    private static String unescapeJsonUrl(String raw) {
+        String out = raw;
+        while (out.indexOf("\\u0026") >= 0) {
+            out = out.replace("\\u0026", "&");
+        }
+        out = out.replace("&amp;", "&");
+        out = out.replace("\\", "");
+        return out;
     }
 
     // ------------------------------------------------------------- instagram
@@ -161,6 +257,14 @@ public final class Sources {
 
     private static List<Item> instagram(String word) throws IOException {
         long now = System.currentTimeMillis();
+        if (BuildConfig.DEBUG && IG_POOL.isEmpty()) {
+            // Debug builds carry a few known-live reels so the extractor can be
+            // exercised while the search index is resting.
+            for (String seed : new String[]{"DRFTariCNvG", "Da-j9XJM6BM",
+                    "DXNIVYtj6CV", "DPMrABMjy1h"}) {
+                IG_POOL.addLast(seed);
+            }
+        }
         if (IG_POOL.isEmpty() && now > igBlockedUntil
                 && now - igFreshAt > 60_000L) {
             igFreshAt = now;
@@ -200,7 +304,7 @@ public final class Sources {
                 }
             }
             if (id != null && taken.add(id)) {
-                out.add(new Item(INSTAGRAM, id, "", "frame",
+                out.add(new Item(INSTAGRAM, id, "", "igprobe",
                         "https://www.instagram.com/reel/" + id + "/embed/", 0, 0));
             }
         }

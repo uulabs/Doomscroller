@@ -110,6 +110,7 @@ public class Main extends Activity {
     private GestureDetector gestures;
     private WebView probe;
     private YoutubeResolver ytResolver;
+    private InstagramResolver igResolver;
 
     private static final class Ready {
         final Sources.Item item;
@@ -199,6 +200,7 @@ public class Main extends Activity {
         applyOrientation();
         Sources.setAllowLandscape(Prefs.landscapeAllowed(this));
         ytResolver = new YoutubeResolver(this);
+        igResolver = new InstagramResolver(this);
         root = new FrameLayout(this);
         root.setBackgroundColor(Color.BLACK);
         root.setSystemUiVisibility(View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
@@ -767,6 +769,20 @@ public class Main extends Activity {
 
     /** Every source must yield a direct stream; anything else is dropped. */
     private String resolve(Sources.Item item) {
+        if ("fbprobe".equals(item.kind)) {
+            String media = Sources.facebookMedia(item.id);
+            igTrace("fb " + item.id + " -> " + (media == null ? "NOMEDIA" : "ok"));
+            return media;
+        }
+        if ("igprobe".equals(item.kind)) {
+            if (igResolver == null || !isFinishing()) {
+                String media = igResolver.resolveBlocking(item.id, 20000);
+                igTrace(item.id + " -> " + (media == null ? "NOURL" :
+                        media.substring(0, Math.min(70, media.length()))));
+                return media;
+            }
+            return null;
+        }
         if ("ytprobe".equals(item.kind)) {
             if (ytResolver == null) {
                 return null;
@@ -1169,6 +1185,19 @@ public class Main extends Activity {
     }
 
     /** Records each subject drawn, so variety can be measured rather than felt. */
+    private void igTrace(String line) {
+        if (!BuildConfig.DEBUG) {
+            return;
+        }
+        try {
+            java.io.FileOutputStream f = new java.io.FileOutputStream(
+                    new java.io.File(getFilesDir(), "ig.log"), true);
+            f.write((line + "\n").getBytes("UTF-8"));
+            f.close();
+        } catch (Exception ignored) {
+        }
+    }
+
     private void traceWord(String word) {
         if (BuildConfig.DEBUG) try {
             java.io.FileOutputStream f = new java.io.FileOutputStream(
@@ -1358,8 +1387,10 @@ public class Main extends Activity {
         slot.rootView.setVisibility(View.GONE);
         stage.addView(slot.rootView, match());
         slot.player.addListener(new Player.Listener() {
+
             @Override
             public void onPlaybackStateChanged(int playbackState) {
+                igTrace("state " + playbackState + " src=" + created.item.source);
                 if (active != created) {
                     return;
                 }
@@ -1385,6 +1416,8 @@ public class Main extends Activity {
 
             @Override
             public void onPlayerError(androidx.media3.common.PlaybackException e) {
+                igTrace("player error: " + e.getErrorCodeName()
+                        + " " + (e.getCause() == null ? "" : e.getCause()));
                 setStatus("skipped: " + e.getErrorCodeName());
                 if (pending == created) {
                     pending = null;
@@ -1402,6 +1435,7 @@ public class Main extends Activity {
             }
         });
         slot.player.setMediaItem(MediaItem.fromUri(r.url));
+        igTrace("prepare " + r.item.source + " url=" + r.url.substring(0, Math.min(80, r.url.length())));
         slot.player.prepare();
         pending = slot;
         handler.postDelayed(new Runnable() {
@@ -1807,10 +1841,13 @@ public class Main extends Activity {
     private void updateTimeLabel() {
         if (active == null || active.player == null) {
             controlsTime.setText("");
+            igTrace("bar: no player");
             return;
         }
         long duration = active.player.getDuration();
         long position = active.player.getCurrentPosition();
+        igTrace("bar: dur=" + duration + " pos=" + position
+                + " txt=" + controlsTime.getText());
         if (duration > 0) {
             controlsTime.setText(formatTime(position) + "   -" + formatTime(duration - position));
         } else {
