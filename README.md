@@ -42,10 +42,18 @@ platform serves at that moment.
 
 | Source | Discovery | Playback |
 | --- | --- | --- |
-| YouTube | Shorts-filtered search results | native stream via `youtubei.js` |
+| YouTube | search results for a subject (Shorts only unless landscape is allowed) | native stream via `youtubei.js` |
 | TikTok | sitemap / tag embeds | TikTok's own embeddable player |
 | X | syndication timeline | direct mp4 |
 | PeerTube | Sepia Search + per-instance lookup | HLS via ExoPlayer |
+| Instagram | reel permalinks from a search index | media URL read from the embed, played natively |
+| Facebook | reel permalinks from a search index | mp4 read from the video plugin, played natively |
+
+Instagram and Facebook are found through a search index rather than the platform
+itself, which has no anonymous discovery, and both play in our own player so no
+account header or comment bar is shown. That index throttles, so they build up
+supply over time. Everything above is on by default except PeerTube, whose clips
+are long form and rarely portrait.
 
 ## Build
 
