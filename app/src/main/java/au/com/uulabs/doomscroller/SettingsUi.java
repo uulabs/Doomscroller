@@ -59,9 +59,7 @@ final class SettingsUi {
                 } else {
                     bottom = insets.getSystemWindowInsetBottom();
                 }
-                int right = insets.getSystemWindowInsetRight();
-                int left = insets.getSystemWindowInsetLeft();
-                v.setPadding(left, 0, right, bottom);
+                v.setPadding(0, 0, 0, bottom);
                 return insets;
             }
         });
@@ -87,7 +85,7 @@ final class SettingsUi {
         titles.addView(title);
 
         TextView sub = new TextView(context);
-        sub.setText("Varied videos, no account, no personal ranking");
+        sub.setText("Random video, no account, no algorithm");
         sub.setTextColor(MUTED);
         sub.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f);
         sub.setPadding(0, dp(context, 3), 0, 0);

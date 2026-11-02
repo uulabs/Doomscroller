@@ -24,7 +24,7 @@ final class InstagramResolver {
             "(function(){try{"
                     + "var bs=String.fromCharCode(92);"
                     + "var v=document.querySelector('video');"
-                    + "if(v){v.muted=true;v.volume=0;var s=v.currentSrc||v.src||'';"
+                    + "if(v){var s=v.currentSrc||v.src||'';"
                     + "if(s)return s;"
                     + "var src=v.querySelector('source');"
                     + "if(src){var s2=src.src||src.getAttribute('src')||'';"

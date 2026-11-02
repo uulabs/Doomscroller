@@ -53,7 +53,7 @@ public final class Prefs {
     private static Set<String> defaultSources() {
         Set<String> out = new LinkedHashSet<String>();
         for (String source : Sources.ALL) {
-            if (!Sources.PEERTUBE.equals(source) && !Sources.X.equals(source)) {
+            if (!Sources.PEERTUBE.equals(source)) {
                 out.add(source);
             }
         }

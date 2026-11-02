@@ -50,8 +50,6 @@ public final class Sources {
         public final String url;
         public final int w;
         public final int h;
-        public String queryLanguage = "";
-        public String queryDomain = "";
 
         Item(String source, String id, String title, String kind, String url, int w, int h) {
             this.source = source;
@@ -154,12 +152,25 @@ public final class Sources {
     /** Reels found the same way as Instagram's: permalinks from a search index. */
     private static List<Item> facebook(String word) throws IOException {
         long now = System.currentTimeMillis();
+        if (BuildConfig.DEBUG && FB_POOL.isEmpty()) {
+            for (String seed : new String[]{"1150644675873413",
+                    "1157802012206431"}) {
+                FB_POOL.addLast(seed);
+            }
+        }
         if (FB_POOL.isEmpty() && now > fbBlockedUntil && now - fbFreshAt > 60_000L) {
             fbFreshAt = now;
             try {
                 String html = get("https://search.brave.com/search?q="
                         + enc("site:facebook.com/reel " + word), null);
-                FB_POOL.addAll(ReelLinks.extract(html, false));
+                Matcher m = Pattern.compile("facebook\\\\.com/reel/([0-9]{6,})")
+                        .matcher(html);
+                Set<String> seen = new HashSet<String>();
+                while (m.find()) {
+                    if (seen.add(m.group(1))) {
+                        FB_POOL.addLast(m.group(1));
+                    }
+                }
                 if (FB_POOL.isEmpty()) {
                     fbBlockedUntil = now + 10 * 60_000L;
                 }
@@ -246,13 +257,29 @@ public final class Sources {
 
     private static List<Item> instagram(String word) throws IOException {
         long now = System.currentTimeMillis();
+        if (BuildConfig.DEBUG && IG_POOL.isEmpty()) {
+            // Debug builds carry a few known-live reels so the extractor can be
+            // exercised while the search index is resting.
+            for (String seed : new String[]{"DRFTariCNvG", "Da-j9XJM6BM",
+                    "DXNIVYtj6CV", "DPMrABMjy1h"}) {
+                IG_POOL.addLast(seed);
+            }
+        }
         if (IG_POOL.isEmpty() && now > igBlockedUntil
                 && now - igFreshAt > 60_000L) {
             igFreshAt = now;
             try {
                 String query = "site:instagram.com/reel " + word;
                 String html = get("https://search.brave.com/search?q=" + enc(query), null);
-                IG_POOL.addAll(ReelLinks.extract(html, true));
+                Matcher m = Pattern.compile("instagram\\\\.com/reel/([A-Za-z0-9_-]{5,})")
+                        .matcher(html);
+                Set<String> seen = new HashSet<String>();
+                while (m.find()) {
+                    String id = m.group(1);
+                    if (seen.add(id)) {
+                        IG_POOL.addLast(id);
+                    }
+                }
                 if (IG_POOL.isEmpty()) {
                     // Throttled or nothing indexed for this subject: rest a while.
                     igBlockedUntil = now + 10 * 60_000L;
@@ -344,7 +371,7 @@ public final class Sources {
             }
             out.add(new Item(TIKTOK, id, "", "frame",
                     "https://www.tiktok.com/player/v1/" + id
-                            + "?autoplay=1&muted=1&loop=0&music_info=0&description=0", 0, 0));
+                            + "?autoplay=1&loop=0&music_info=0&description=0", 0, 0));
         }
         if (!out.isEmpty()) {
             return out;
@@ -366,7 +393,7 @@ public final class Sources {
             }
             out.add(new Item(TIKTOK, id, "", "frame",
                     "https://www.tiktok.com/player/v1/" + id
-                            + "?autoplay=1&muted=1&loop=0&music_info=0&description=0", 0, 0));
+                            + "?autoplay=1&loop=0&music_info=0&description=0", 0, 0));
         }
         Collections.shuffle(out);
         return out;
