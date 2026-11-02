@@ -2274,20 +2274,65 @@ public class Main extends Activity {
         }
     }
 
+    /**
+     * The link for the clip on screen.
+     *
+     * Each source has its own shape of permalink and several only ever hand back
+     * a stream, so a shared link is built from the source and its id rather than
+     * from whatever URL happened to play. An empty link is never shared.
+     */
+    private String shareLink(Sources.Item item) {
+        if (item == null) {
+            return null;
+        }
+        if (Sources.YOUTUBE.equals(item.source)) {
+            return "https://youtu.be/" + item.id;
+        }
+        if (Sources.INSTAGRAM.equals(item.source)) {
+            return "https://www.instagram.com/reel/" + item.id + "/";
+        }
+        if (Sources.FACEBOOK.equals(item.source)) {
+            return "https://www.facebook.com/reel/" + item.id + "/";
+        }
+        if (Sources.TIKTOK.equals(item.source)) {
+            return "https://www.tiktok.com/player/v1/" + item.id;
+        }
+        if (Sources.PEERTUBE.equals(item.source)) {
+            // The stream URL carries the instance; its watch page is what a
+            // person can open.
+            try {
+                java.net.URI uri = java.net.URI.create(item.url);
+                if (uri.getHost() != null) {
+                    return uri.getScheme() + "://" + uri.getHost() + "/w/" + item.id;
+                }
+            } catch (Exception ignored) {
+            }
+            return null;
+        }
+        if (Sources.X.equals(item.source)) {
+            // X gives no post id for a discovered clip, so the downloader gets
+            // the media itself rather than a made-up status link.
+            return item.url != null && item.url.startsWith("http") ? item.url : null;
+        }
+        return item.url != null && item.url.startsWith("http") ? item.url : null;
+    }
+
     private void share() {
         if (current == null) {
             return;
         }
-        String link;
-        if (Sources.YOUTUBE.equals(current.source)) {
-            link = "https://youtu.be/" + current.id;
-        } else if (Sources.TIKTOK.equals(current.source)) {
-            link = "https://www.tiktok.com/@x/video/" + current.id;
-        } else if (Sources.X.equals(current.source)) {
-            link = "https://x.com/i/status/" + current.id;
-        } else {
-            link = current.url;
+        String link = shareLink(current);
+        if (link == null || link.isEmpty()) {
+            setStatus("no shareable link for this clip");
+            handler.postDelayed(new Runnable() {
+                @Override
+                public void run() {
+                    setStatus(null);
+                }
+            }, 2500);
+            return;
         }
+        igTrace("share " + current.source + " -> " + link);
         Intent send = new Intent(Intent.ACTION_SEND);
         send.setType("text/plain");
         send.putExtra(Intent.EXTRA_TEXT, link);
