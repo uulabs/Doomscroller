@@ -18,6 +18,9 @@ public final class Prefs {
     private static final String KEY_CONTROLS = "show_controls";
     private static final String KEY_SEEN_IDS = "seen_ids";
     private static final String KEY_BAG = "bag_";
+    private static final String KEY_SOURCES_VERSION = "sources_default_version";
+    /** Bumped whenever the default source set changes and must be applied. */
+    private static final int SOURCES_VERSION = 2;
 
     private Prefs() {
     }
@@ -41,6 +44,20 @@ public final class Prefs {
             copy.add("en");
         }
         sp(c).edit().putStringSet(KEY_LANGS, copy).apply();
+    }
+
+    /**
+     * Everything is on out of the box except PeerTube, whose clips are long form
+     * and rarely portrait, so it would take more from the feed than it gives.
+     */
+    private static Set<String> defaultSources() {
+        Set<String> out = new LinkedHashSet<String>();
+        for (String source : Sources.ALL) {
+            if (!Sources.PEERTUBE.equals(source)) {
+                out.add(source);
+            }
+        }
+        return out;
     }
 
     /** Whether a touch brings up the playback bar. */
@@ -78,17 +95,18 @@ public final class Prefs {
     }
 
     public static Set<String> sources(Context c) {
-        Set<String> s = sp(c).getStringSet(KEY_SOURCES, null);
+        SharedPreferences prefs = sp(c);
+        // A changed default is applied once to existing installs too, so nobody
+        // is left on an old selection they never chose.
+        if (prefs.getInt(KEY_SOURCES_VERSION, 1) < SOURCES_VERSION) {
+            Set<String> defaults = defaultSources();
+            prefs.edit().putStringSet(KEY_SOURCES, defaults)
+                    .putInt(KEY_SOURCES_VERSION, SOURCES_VERSION).apply();
+            return defaults;
+        }
+        Set<String> s = prefs.getStringSet(KEY_SOURCES, null);
         if (s == null) {
-            s = new LinkedHashSet<String>();
-            // Everything is on out of the box except PeerTube, whose clips are
-            // long form and rarely portrait, so it would take more than it gives.
-            for (String source : Sources.ALL) {
-                if (Sources.PEERTUBE.equals(source)) {
-                    continue;
-                }
-                s.add(source);
-            }
+            s = defaultSources();
         }
         return new LinkedHashSet<String>(s);
     }
@@ -98,7 +116,9 @@ public final class Prefs {
         if (copy.isEmpty()) {
             copy.add(Sources.YOUTUBE);
         }
-        sp(c).edit().putStringSet(KEY_SOURCES, copy).apply();
+        // An explicit choice is current by definition; never migrate over it.
+        sp(c).edit().putStringSet(KEY_SOURCES, copy)
+                .putInt(KEY_SOURCES_VERSION, SOURCES_VERSION).apply();
     }
 
     /**
