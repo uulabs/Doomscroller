@@ -769,29 +769,26 @@ public class Main extends Activity {
                     + "var t=b.toLowerCase();"
                     + "if(t.indexOf('currently unavailable')>=0"
                     + "||t.indexOf('video unavailable')>=0)return 'GONE';"
-                    // TikTok replaces a finished clip with this card. Fighting it
-                    // by resuming playback is what made it strobe; the card is
-                    // simply the end of the clip, so the feed moves on.
                     + "if(t.indexOf('more videos on tiktok')>=0)return 'END';"
-                    // The playhead is the only signal that cannot lie about a
-                    // provider player. When it stops moving, or the element sits
-                    // paused, the clip is over - however the page chose to say so.
                     + "var v=document.querySelector('video');"
                     + "if(!v)return 'NOSTREAM';"
-                    // Provider players autoplay muted, because browsers refuse
-                    // audible autoplay. The app is the user's gesture, so the
-                    // element is unmuted and started here.
                     + "if(v.muted){v.muted=false;}"
                     + "if(v.paused&&!v.ended&&v.currentTime<0.6){try{v.play();}catch(e){}}"
+                    + "if(v.ended)return 'END';"
+                    // A stalled playhead is only an ending when the element is
+                    // not waiting for data. Buffering looks identical otherwise,
+                    // which is what cut clips off a few seconds in.
                     + "var now=Date.now();"
                     + "var w=window.__uuWatch=window.__uuWatch||{t:-1,at:now,pausedAt:0};"
-                    + "if(v.ended)return 'END';"
+                    + "var buffering=v.readyState<3;"
+                    + "if(v.currentTime!==w.t){w.t=v.currentTime;w.at=now;}"
                     + "if(v.paused){"
                     + "if(!w.pausedAt)w.pausedAt=now;"
-                    + "if(now-w.pausedAt>3500)return 'END';"
+                    + "if(!buffering&&now-w.pausedAt>4000)return 'END';"
                     + "}else{w.pausedAt=0;}"
-                    + "if(v.currentTime!==w.t){w.t=v.currentTime;w.at=now;}"
-                    + "else if(now-w.at>4500)return 'END';"
+                    + "var stalled=now-w.at;"
+                    + "if(!buffering&&stalled>4000)return 'END';"
+                    + "if(buffering&&stalled>20000)return 'END';"
                     + "return '';}catch(e){return '';}})()";
 
     private void watchForUnavailable(final WebView view, final int attempt) {

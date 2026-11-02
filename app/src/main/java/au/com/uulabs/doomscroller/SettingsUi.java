@@ -42,9 +42,26 @@ final class SettingsUi {
     static View build(final Activity activity, final Runnable close) {
         final Context context = activity;
 
-        ScrollView scroll = new ScrollView(context);
+        final ScrollView scroll = new ScrollView(context);
         scroll.setBackgroundColor(BG);
         scroll.setFillViewport(true);
+        // The panel draws edge to edge, so its content stops above the
+        // navigation bar rather than putting Done underneath it.
+        scroll.setOnApplyWindowInsetsListener(new View.OnApplyWindowInsetsListener() {
+            @Override
+            public android.view.WindowInsets onApplyWindowInsets(View v,
+                                                                 android.view.WindowInsets insets) {
+                int bottom;
+                if (android.os.Build.VERSION.SDK_INT >= 30) {
+                    bottom = insets.getInsets(
+                            android.view.WindowInsets.Type.navigationBars()).bottom;
+                } else {
+                    bottom = insets.getSystemWindowInsetBottom();
+                }
+                v.setPadding(0, 0, 0, bottom);
+                return insets;
+            }
+        });
 
         LinearLayout column = new LinearLayout(context);
         column.setOrientation(LinearLayout.VERTICAL);
