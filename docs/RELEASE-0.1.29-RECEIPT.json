@@ -1,0 +1,17 @@
+{
+  "tag": "v0.1.29",
+  "sourceCommit": "5c842a6",
+  "url": "https://github.com/uulabs/Doomscroller/releases/tag/v0.1.29",
+  "publicLatestVerified": true,
+  "downloadHashesMatched": true,
+  "apkHashes": {
+    "UUDoomscroller-0.1.29.apk": "bc4befc5d669aadeb6b6a946afc8f9be8c2fa3989c4e4e086437c8ed952bfd32",
+    "UUDoomscroller-0.1.29-no-self-update.apk": "ef52dadc7fb270657c322ca03730af99f7d9cf5de3947998bba2e00b87f8ef21",
+    "UUDoomscroller-0.1.29-selfupdate.apk": "bc4befc5d669aadeb6b6a946afc8f9be8c2fa3989c4e4e086437c8ed952bfd32"
+  },
+  "s98InstalledExactRecommendedApk": true,
+  "settingsRestored": true,
+  "speakerListeningVerified": false,
+  "xiaomiVerified": false,
+  "usageRemainingPercent": 69
+}

@@ -2,7 +2,7 @@
 
 ## Current status — 3 November 2026
 
-0.1.28/code29 is the public release. The current repair candidate is 0.1.29/code30, built and signature/asset verified but not published yet. HEAD before this repair is 9a8200b on main. Current changes and acceptance details are recorded in the final section and docs/REPAIR-0.1.28-META.md; older entries below are historical checkpoints, not current repository/device status.
+**Published:** 0.1.29/code30 at https://github.com/uulabs/Doomscroller/releases/tag/v0.1.29, source commit5c842a6. Public latest endpoint and every downloaded asset hash verified. Exact signed recommended APK installed on S98; settings preserved and temporary test toggles restored. Device lease released. No build/test process remains active. See docs/RELEASE-0.1.29-RECEIPT.json and final acceptance sections below. Older entries are historical checkpoints, not current repository/device status.
 
 Owner authorized a new working release and later explicitly said “Publish please.” Do not invent another approval requirement. Verify what can actually be measured and disclose that speaker listening and Xiaomi15Ultra behavior have not been independently verified. S98 is the remote test device; Blade is untouched. Latest verified usage is 71% remaining; halt at 65% remaining if reached and preserve a detailed handover. This is an account-wide meter, not a task token budget.
 
@@ -234,3 +234,12 @@ The exact signed 0.1.29 recommended APK was installed with adb install -r on S98
 The exact signed 0.1.29/code30 recommended APK played Instagram and Facebook in a Meta-only release smoke on S98, with five forward swipes and paired frames showing motion for both providers. Original native controls and plain source names were visible when temporarily enabled. Crash log for the release process was empty. Owner's original YouTube/TikTok/X/Instagram/Facebook enabled, PeerTube disabled, landscape disabled and playback-bar disabled choices were restored after testing. No production data was cleared. Speaker listening and Xiaomi15Ultra acceptance remain unverified; network loading gaps remain possible.
 
 Owner again explicitly requested publication. Publish the held, verified artifacts as v0.1.29; do not rebuild or overwrite earlier version assets. Recommended/compatibility SHA256: bc4befc5d669aadeb6b6a946afc8f9be8c2fa3989c4e4e086437c8ed952bfd32. Manual-update SHA256: ef52dadc7fb270657c322ca03730af99f7d9cf5de3947998bba2e00b87f8ef21. Authoritative artifacts: /Volumes/970P/UULabs/Artifacts/UUDoomscroller/0.1.29-local-candidate.
+
+
+## Final publication checkpoint
+
+0.1.29 is public and verified as latest. Exact signed release showed moving Instagram and Facebook video on S98; mixed diagnostic completed32 forward+6 history gestures. Original controls preserved; TikTok provider toolbar disabled. Both APK variants and compatibility alias downloaded from GitHub and matched held hashes. S98 left on production0.1.29 with original settings restored; Blade untouched. No speaker listening or Xiaomi acceptance claim.
+
+Deepy continuation, if needed: reproduce any remaining provider/network gaps with source and timestamp; do not substitute fixed debug IDs for discovery acceptance. Investigate existing native background-resume behavior separately before changing lifecycle. Refresh public URL cache with the documented script and repeat Meta-only acceptance; preserve language/category limitations. Do not widen player UI/audio changes without a reproduced defect.
+
+Final usage:31% used/69% remaining, above the requested65% stop threshold. Work completed without spending usage to reach that threshold. Retention:59.6MB final artifacts at settlement;115.8MB owned rebuildable output removed, plus redundant downloaded verification copies (exact totals in retention-receipt.json). Remaining scratch is a named current-review exception until5November2026; source, unique current diagnostics and authoritative evidence retained. No foreign work or device data deleted.

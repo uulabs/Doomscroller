@@ -86,3 +86,8 @@ The exact signed 0.1.29 recommended APK was installed with adb install -r on S98
 The exact signed 0.1.29/code30 recommended APK played Instagram and Facebook in a Meta-only release smoke on S98, with five forward swipes and paired frames showing motion for both providers. Original native controls and plain source names were visible when temporarily enabled. Crash log for the release process was empty. Owner's original YouTube/TikTok/X/Instagram/Facebook enabled, PeerTube disabled, landscape disabled and playback-bar disabled choices were restored after testing. No production data was cleared. Speaker listening and Xiaomi15Ultra acceptance remain unverified; network loading gaps remain possible.
 
 Owner again explicitly requested publication. Publish the held, verified artifacts as v0.1.29; do not rebuild or overwrite earlier version assets. Recommended/compatibility SHA256: bc4befc5d669aadeb6b6a946afc8f9be8c2fa3989c4e4e086437c8ed952bfd32. Manual-update SHA256: ef52dadc7fb270657c322ca03730af99f7d9cf5de3947998bba2e00b87f8ef21. Authoritative artifacts: /Volumes/970P/UULabs/Artifacts/UUDoomscroller/0.1.29-local-candidate.
+
+
+## Publication complete
+
+0.1.29/code30 published from5c842a6, public latest and downloaded hashes verified. Signed release tested onS98; settings restored, lease released. See RELEASE-0.1.29-RECEIPT.json and HANDOVER-DEEPY.md.
