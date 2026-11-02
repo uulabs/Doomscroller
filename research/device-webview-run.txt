@@ -1,0 +1,9 @@
+BEGIN
+LOAD 0 https://www.instagram.com/explore/tags/cake/
+RESULT 0 "{\"url\":\"https://www.instagram.com/accounts/login/\",\"title\":\"Instagram\",\"len\":365857,\"videos\":0,\"slashVideo\":0,\"reel\":0,\"igpost\":0,\"status\":0,\"videoId\":0,\"playAddr\":0,\"login\":77,\"captcha\":6,\"text\":\"English (US) Username, email or mobile number Password Log in Forgot password? Create new account\"}"
+LOAD 1 https://x.com/search?q=cake%20filter%3Avideos&f=live
+RESULT 1 "{\"url\":\"https://x.com/i/jf/onboarding/web?redirect_after_login=%2Fsearch%3Ff%3Dlive%26q%3Dcake%2Bfilter%253Avideos&mode=login\",\"title\":\"X - The Everything App / X\",\"len\":90604,\"videos\":0,\"slashVideo\":0,\"reel\":0,\"igpost\":0,\"status\":0,\"videoId\":0,\"playAddr\":0,\"login\":0,\"captcha\":0,\"text\":\"See what's happening Continue with phone Continue with Google Continue with Google Continue with Apple or Email or username Continue By continuing, you agree to\"}"
+LOAD 2 https://www.youtube.com/results?search_query=cake&sp=EgIYAQ%3D%3D
+ERROR 2 https://csp.withgoogle.com/csp/youtube_mobile/image -1
+TIMEOUT 2
+DONE

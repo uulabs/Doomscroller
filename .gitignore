@@ -1,0 +1,20 @@
+# build output
+build/
+.gradle/
+.kotlin/
+.idea/
+local.properties
+
+# signing material - never commit
+*.jks
+*.keystore
+keystore.properties
+SigningKeys/
+
+# scratch
+captures/
+*.log
+
+# device-captured evidence, kept on disk but out of history
+research/shots/
+research/*.log
