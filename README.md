@@ -27,35 +27,16 @@ video feed assembled from several public sources.
 
 ## How it picks
 
-There is one fixed input, and it is a list of words.
+Nothing is ranked, recommended or remembered about the person watching.
 
-On each draw the app takes the next subject from a shuffled bag holding every
-word of every language you enabled, and searches each source for it. The bag is
-spent completely before it is refilled, and it is saved, so nothing comes round
-again until everything else has been used - including across restarts.
+Each draw takes a subject at random, searches every enabled source for it and
+plays whatever comes back first. Subjects are spent from a shuffled pool, so
+nothing returns until everything else has been used — including across
+restarts.
 
-The words are ordinary nouns and activities, held one per line in
-[`assets/subjects/`](app/src/main/assets/subjects/) - `en.txt`, `ja.txt` and so
-on. Adding subjects means editing a text file, not touching code.
-
-| Language | Subjects | | Language | Subjects |
-| --- | --- | --- | --- |
-| English | 1068 | | Italian | 93 |
-| Japanese | 310 | | Russian | 82 |
-| Chinese | 329 | | Arabic | 49 |
-| Korean | 175 | | Hindi | 56 |
-| Spanish | 130 | | Indonesian | 51 |
-| Portuguese | 109 | | Turkish | 51 |
-| French | 117 | | Thai | 45 |
-| German | 101 | | | |
-
-2766 subjects in total, covering motorsport and cars, computing and security,
-space, earth science, animals, food, every mainstream sport, craft, music,
-places, transport, industry, gaming, fashion, home, Japanese car culture
-(JDM, kei cars, touge runs) and street-level confrontation.
-Nothing else is curated: no list of videos, channels or creators. The word
-decides only what gets *asked for*, never what comes back. The results are
-whatever the platform returns at that moment.
+There is no list of videos, channels or creators anywhere. A subject decides
+only what gets *asked for*, never what comes back; the results are whatever the
+platform serves at that moment.
 
 ## Sources
 
