@@ -29,14 +29,19 @@ video feed assembled from several public sources.
 
 Nothing is ranked, recommended or remembered about the person watching.
 
-Each draw takes a subject at random, searches every enabled source for it and
-plays whatever comes back first. Subjects are spent from a shuffled pool, so
-nothing returns until everything else has been used, including across
-restarts.
+Each draw balances enabled languages, then subject families, then samples a query
+from a persistent shuffled bag. A bundled multilingual Wikidata catalogue adds
+thousands of subjects alongside the original local vocabulary. New language
+selections apply immediately. Providers still rank their own search results;
+this is varied exploration, not a uniform sample of every video on the internet.
 
-There is no list of videos, channels or creators anywhere. A subject decides
-only what gets *asked for*, never what comes back; the results are whatever the
-platform serves at that moment.
+There is no list of videos, channels or creators. See [topic coverage](docs/TOPIC-CATALOG.md)
+for counts, provenance and limitations.
+
+The current provider appears as a small text label. With landscape allowed, a
+measured wide clip shows a rotate control while upright; tap it to turn the view.
+Videos fit inside the screen without cropping. Swipe down through up to 100
+previous clips; swipe up retraces that history before requesting new content.
 
 ## Sources
 
@@ -44,6 +49,8 @@ platform serves at that moment.
 | --- | --- | --- |
 | YouTube | Shorts-filtered search results | native stream via `youtubei.js` |
 | TikTok | sitemap / tag embeds | TikTok's own embeddable player |
+| Instagram | external subject search | resolved stream, native player |
+| Facebook | external subject search | resolved stream, native player |
 | X | syndication timeline | direct mp4 |
 | PeerTube | Sepia Search + per-instance lookup | HLS via ExoPlayer |
 
