@@ -125,6 +125,14 @@ public final class Prefs {
      * the same handful came round again next launch - which is what "the same video twice" looked
      * like from the outside.
      */
+    public static String playedIds(Context c) {
+        return sp(c).getString("played_ids", "");
+    }
+
+    public static void setPlayedIds(Context c, String csv) {
+        sp(c).edit().putString("played_ids", csv).apply();
+    }
+
     public static String seenIds(Context c) {
         return sp(c).getString(KEY_SEEN_IDS, "");
     }

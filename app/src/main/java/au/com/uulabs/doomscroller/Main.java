@@ -61,6 +61,9 @@ import java.util.concurrent.TimeUnit;
 public class Main extends Activity {
 
     private static final int PREFETCH = 3;
+    /** Raised when the feed has run dry, so it refills faster than it drains. */
+    private static final int PREFETCH_STARVING = 6;
+    private volatile boolean starving;
 
     /** How long a provider-player clip is given before the feed moves on. */
     private static final long PAGE_DWELL_MILLIS = 60000L;
@@ -83,6 +86,8 @@ public class Main extends Activity {
     private final ArrayDeque<Ready> ready = new ArrayDeque<Ready>();
     private final ArrayDeque<Ready> history = new ArrayDeque<Ready>();
     private final Set<String> seen = new LinkedHashSet<String>();
+    /** Ids that have actually been shown, so forward scrolling cannot repeat one. */
+    private final Set<String> played = new LinkedHashSet<String>();
     private boolean seenDirty;
     private int seenAdds;
 
@@ -422,6 +427,31 @@ public class Main extends Activity {
      * The set is what makes the feed stop repeating itself: without it, every launch started
      * from an empty memory and the same videos came back.
      */
+    private void markPlayed(String id) {
+        synchronized (played) {
+            played.add(id);
+            StringBuilder csv = new StringBuilder();
+            for (String one : played) {
+                if (csv.length() > 0) {
+                    csv.append(',');
+                }
+                csv.append(one);
+            }
+            Prefs.setPlayedIds(this, csv.toString());
+            while (played.size() > 2000) {
+                java.util.Iterator<String> it = played.iterator();
+                it.next();
+                it.remove();
+            }
+        }
+    }
+
+    private boolean isPlayed(String id) {
+        synchronized (played) {
+            return played.contains(id);
+        }
+    }
+
     private void remember(String id) {
         boolean added;
         synchronized (seen) {
@@ -591,6 +621,12 @@ public class Main extends Activity {
                 if (loadingView != null) {
                     boolean blank = screenIsBlank();
                     long now = System.currentTimeMillis();
+                    if (loadingMessage != null && blank && blankSince != 0
+                            && now - blankSince > 1500 && pending == null) {
+                        // The clip has left and nothing is being measured or
+                        // promoted, so say what the wait actually is.
+                        loadingMessage.setText("finding more");
+                    }
                     if (!blank) {
                         blankSince = 0;
                     } else if (blankSince == 0) {
@@ -627,6 +663,12 @@ public class Main extends Activity {
             }
         }
         loadingView.setVisibility(show ? View.VISIBLE : View.GONE);
+        if (show && controlsBar != null) {
+            // A play/pause control over a loading screen looks broken.
+            handler.removeCallbacks(hideControls);
+            controlsBar.animate().cancel();
+            controlsBar.setVisibility(View.GONE);
+        }
         if (show) {
             status.bringToFront();
             if (settingsButton != null) {
@@ -777,7 +819,7 @@ public class Main extends Activity {
                 try {
                     while (!destroyed) {
                         synchronized (ready) {
-                            if (ready.size() >= PREFETCH) {
+                            if (ready.size() >= (starving ? PREFETCH_STARVING : PREFETCH)) {
                                 break;
                             }
                         }
@@ -836,6 +878,10 @@ public class Main extends Activity {
             return null;
         }
         String source = pickSource(sources);
+        if (starving && sources.contains(Sources.YOUTUBE)) {
+            // YouTube resolves in about a second; the rest can take several.
+            source = Sources.YOUTUBE;
+        }
         String word = pickWord(source);
         List<Sources.Item> candidates;
         try {
@@ -1717,6 +1763,26 @@ public class Main extends Activity {
     }
 
     /** Acknowledges a swipe that could not swap yet: the screen lifts and returns. */
+    /**
+     * Commits a swipe whose destination is not ready. The clip leaves at once
+     * and the face covers the wait, so the gesture is answered with movement
+     * rather than a bounce that reads as "that did not work".
+     */
+    private void rollAwayToLoading(float direction) {
+        if (active != null) {
+            slideOut(active.rootView, direction);
+            if (active.player != null) {
+                active.player.setVolume(0f);
+                active.player.pause();
+            }
+            if (active.web != null) {
+                active.web.evaluateJavascript(JS_IDLE, null);
+            }
+            active.rendered = false;
+        }
+        refreshLoading();
+    }
+
     private void nudge(float direction) {
         if (active == null || active.rootView == null) {
             return;
@@ -1843,17 +1909,9 @@ public class Main extends Activity {
             if (active != null) {
                 // Nothing is buffered yet, so the clip leaves the screen and the
                 // next one arrives when it is ready.
-                slideOut(active.rootView, -swapDirection);
-                // No audio may remain behind the loading screen while discovery waits.
-                if (active.player != null) {
-                    active.player.setVolume(0f);
-                    active.player.pause();
-                }
-                if (active.web != null) active.web.evaluateJavascript(JS_IDLE, null);
-                // The clip is leaving, so the face may cover the wait instead of
-                // a black screen.
-                active.rendered = false;
+                rollAwayToLoading(-swapDirection);
             }
+            starving = true;
             refreshLoading();
             // Nothing buffered: remember the swipe and swap as soon as a slot is
             // ready, so a fast scroll never appears to do nothing.
@@ -1862,12 +1920,23 @@ public class Main extends Activity {
             return;
         }
         if (!portraitVerified(pending) && !Prefs.landscapeAllowed(this)) {
-            // Keep waiting for geometry, but visibly acknowledge the swipe.
-            nudge(-swapDirection);
+            // A clip is on its way but has not been measured yet. Commit the
+            // swipe anyway: it leaves and the face covers the wait, so the
+            // gesture never looks rejected.
+            rollAwayToLoading(-swapDirection);
+            starving = true;
             wantNext = true;
             return;
         }
+        if (pending.navigation == 0 && isPlayed(pending.item.toString())) {
+            // Already watched. Only history may replay a clip.
+            rejectSlot(pending);
+            starving = true;
+            return;
+        }
         wantNext = false;
+        starving = false;
+        markPlayed(pending.item.toString());
         Slot old = active;
         active = pending;
         pending = null;
@@ -1996,6 +2065,12 @@ public class Main extends Activity {
     private void showControls() {
         if (controlsBar == null || settingsPanel != null
                 || !Prefs.controlsEnabled(this)) {
+            return;
+        }
+        // Nothing to control while the feed has nothing on screen, and a bar
+        // reading 0:00 over the loading face looks broken.
+        if ((loadingView != null && loadingView.getVisibility() == View.VISIBLE)
+                || screenIsBlank()) {
             return;
         }
         controlsBar.setVisibility(View.VISIBLE);
