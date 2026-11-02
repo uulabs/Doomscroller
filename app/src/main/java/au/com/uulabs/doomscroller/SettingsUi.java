@@ -162,6 +162,21 @@ final class SettingsUi {
         });
         formatCard.addView(row(context, "Allow landscape videos",
                 "Off means only portrait clips appear", landscape, false));
+
+        final Toggle controls = new Toggle(context);
+        controls.setChecked(Prefs.controlsEnabled(context));
+        controls.setOnChangeListener(new Toggle.OnChange() {
+            @Override
+            public void onChanged(boolean on) {
+                Prefs.setControlsEnabled(context, on);
+            }
+        });
+        View divider = new View(context);
+        divider.setBackgroundColor(DIVIDER);
+        formatCard.addView(divider, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, 1));
+        formatCard.addView(row(context, "Playback bar",
+                "Touch to show play and time", controls, false));
         column.addView(formatCard);
 
         // ---- languages, last and collapsed: fifteen rows is a long list

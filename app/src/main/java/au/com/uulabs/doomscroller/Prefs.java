@@ -15,6 +15,7 @@ public final class Prefs {
     private static final String KEY_LANDSCAPE = "allow_landscape";
     private static final String KEY_DISCLAIMER = "disclaimer_accepted";
     private static final String KEY_UPDATE_AT = "update_checked_at";
+    private static final String KEY_CONTROLS = "show_controls";
     private static final String KEY_SEEN_IDS = "seen_ids";
     private static final String KEY_BAG = "bag_";
 
@@ -40,6 +41,15 @@ public final class Prefs {
             copy.add("en");
         }
         sp(c).edit().putStringSet(KEY_LANGS, copy).apply();
+    }
+
+    /** Whether a touch brings up the playback bar. */
+    public static boolean controlsEnabled(Context c) {
+        return sp(c).getBoolean(KEY_CONTROLS, true);
+    }
+
+    public static void setControlsEnabled(Context c, boolean enabled) {
+        sp(c).edit().putBoolean(KEY_CONTROLS, enabled).apply();
     }
 
     public static long lastUpdateCheck(Context c) {

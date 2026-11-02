@@ -96,6 +96,12 @@ public class Main extends Activity {
     private boolean filling;
     private boolean paused;
     private boolean wantNext;
+    /** True while the opening notice is up: nothing may play behind it. */
+    private boolean gateOpen;
+    private LinearLayout controlsBar;
+    private TextView controlsToggle;
+    private TextView controlsTime;
+    private long lastActivePing;
     /** +1 for a forward swap, -1 when going back, so motion matches the swipe. */
     private float swapDirection = 1f;
     private boolean lastLandscape;
@@ -119,6 +125,7 @@ public class Main extends Activity {
 
     private static final class Slot {
         String url;
+        long shownAt;
         boolean rendered;
         ExoPlayer player;      // null for page slots
         PlayerView view;       // null for page slots
@@ -155,6 +162,12 @@ public class Main extends Activity {
 
             @Override
             public boolean onSingleTapUp(MotionEvent e) {
+                if (settingsPanel == null && Prefs.controlsEnabled(Main.this)) {
+                    // The bar carries the play control, so a tap only brings it
+                    // up rather than also pausing what you were watching.
+                    showControls();
+                    return true;
+                }
                 if (settingsPanel == null) {
                     togglePause();
                 }
@@ -170,6 +183,9 @@ public class Main extends Activity {
 
     @Override
     public boolean dispatchTouchEvent(MotionEvent ev) {
+        if (ev.getAction() == MotionEvent.ACTION_DOWN) {
+            showControls();
+        }
         if (gestures != null) {
             gestures.onTouchEvent(ev);
         }
@@ -227,6 +243,63 @@ public class Main extends Activity {
         label.setPadding(0, dp(18), 0, 0);
         loading.addView(label);
         loadingView = loading;
+        controlsBar = new LinearLayout(this);
+        controlsBar.setOrientation(LinearLayout.HORIZONTAL);
+        controlsBar.setGravity(Gravity.CENTER_VERTICAL);
+        GradientDrawable barBackground = new GradientDrawable();
+        barBackground.setColor(0xE617171A);
+        barBackground.setCornerRadius(dp(20));
+        controlsBar.setBackground(barBackground);
+        controlsBar.setPadding(dp(18), dp(11), dp(18), dp(11));
+
+        controlsToggle = new TextView(this);
+        controlsToggle.setText("\u25B6");
+        controlsToggle.setTextColor(Color.WHITE);
+        controlsToggle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 17f);
+        controlsToggle.setPadding(0, 0, dp(16), 0);
+        controlsToggle.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                togglePause();
+                updateControls();
+            }
+        });
+        controlsBar.addView(controlsToggle);
+
+        controlsTime = new TextView(this);
+        controlsTime.setTextColor(Color.parseColor("#BBBBBB"));
+        controlsTime.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f);
+        controlsBar.addView(controlsTime);
+
+        controlsBar.setVisibility(View.GONE);
+        FrameLayout.LayoutParams barParams = new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        barParams.gravity = Gravity.BOTTOM | Gravity.LEFT;
+        barParams.leftMargin = dp(20);
+        barParams.bottomMargin = dp(44);
+        root.addView(controlsBar, barParams);
+        // Keep the bar above the navigation bar rather than underneath it.
+        final FrameLayout.LayoutParams liftParams = barParams;
+        root.setOnApplyWindowInsetsListener(new View.OnApplyWindowInsetsListener() {
+            @Override
+            public android.view.WindowInsets onApplyWindowInsets(View v,
+                                                                 android.view.WindowInsets insets) {
+                int bottom;
+                if (android.os.Build.VERSION.SDK_INT >= 30) {
+                    bottom = insets.getInsets(
+                            android.view.WindowInsets.Type.navigationBars()).bottom;
+                } else {
+                    bottom = insets.getSystemWindowInsetBottom();
+                }
+                liftParams.bottomMargin = dp(44) + bottom;
+                if (controlsBar != null) {
+                    controlsBar.setLayoutParams(liftParams);
+                }
+                return insets;
+            }
+        });
+        root.requestApplyInsets();
+
         root.addView(loadingView, match());
         loadingView.setVisibility(View.VISIBLE);
         videoShown = false;
@@ -333,7 +406,7 @@ public class Main extends Activity {
      * design, so the person has to be told that before they see it.
      */
     private void showDisclaimerIfNeeded() {
-        if (Prefs.disclaimerAccepted(this) || settingsPanel != null) {
+        if (settingsPanel != null) {
             return;
         }
         final View gate = new ScrollView(this);
@@ -386,6 +459,10 @@ public class Main extends Activity {
             public void onClick(View v) {
                 Prefs.setDisclaimerAccepted(Main.this, true);
                 root.removeView(gate);
+                gateOpen = false;
+                if (active != null && active.web != null) {
+                    active.web.evaluateJavascript(JS_ACTIVE, null);
+                }
                 if (active != null && active.player != null && !paused) {
                     active.player.play();
                 }
@@ -397,8 +474,13 @@ public class Main extends Activity {
         column.addView(accept, acceptParams);
 
         root.addView(gate, match());
+        // The notice is a gate, not a banner: playback waits for it.
+        gateOpen = true;
         if (active != null && active.player != null) {
             active.player.pause();
+        }
+        if (active != null && active.web != null) {
+            active.web.evaluateJavascript(JS_IDLE, null);
         }
     }
 
@@ -415,6 +497,11 @@ public class Main extends Activity {
                         blankSince = 0;
                     } else if (blankSince == 0) {
                         blankSince = now;
+                    }
+                    if (active != null && active.web != null && !gateOpen
+                            && now - lastActivePing > 1200) {
+                        lastActivePing = now;
+                        active.web.evaluateJavascript(JS_ACTIVE, null);
                     }
                     boolean settled = blank && blankSince != 0
                             && now - blankSince > 700;
@@ -828,6 +915,18 @@ public class Main extends Activity {
                     setLoading(false);
                 }
                 if (giveUp && isActive) {
+                    // A page can carry its end-of-clip text as it loads, which
+                    // skipped the clip the moment it appeared. It has to have
+                    // been on screen for a moment before that is believed.
+                    if (System.currentTimeMillis() - active.shownAt < 1500) {
+                        view.postDelayed(new Runnable() {
+                            @Override
+                            public void run() {
+                                watchForUnavailable(view, 0);
+                            }
+                        }, 900);
+                        return;
+                    }
                     next();
                     return;
                 }
@@ -1414,6 +1513,7 @@ public class Main extends Activity {
             }, 280);
         }
         active.rootView.setVisibility(View.VISIBLE);
+        active.shownAt = System.currentTimeMillis();
         slideIn(active.rootView, swapDirection);
         swapDirection = 1f;
         if (active.player != null
@@ -1440,7 +1540,11 @@ public class Main extends Activity {
         }
         if (active.player != null) {
             active.player.setVolume(1f);
-            active.player.play();
+            if (gateOpen) {
+                active.player.pause();
+            } else {
+                active.player.play();
+            }
         }
         paused = false;
         setStatus(null);
@@ -1480,6 +1584,78 @@ public class Main extends Activity {
         swapDirection = -1f;
         wantNext = true;
         pump();
+    }
+
+    /** The bar appears on touch and fades away by itself. */
+    private void showControls() {
+        if (controlsBar == null || settingsPanel != null
+                || !Prefs.controlsEnabled(this)) {
+            return;
+        }
+        controlsBar.setVisibility(View.VISIBLE);
+        controlsBar.animate().cancel();
+        controlsBar.animate().alpha(1f).setDuration(120).start();
+        updateControls();
+        handler.removeCallbacks(hideControls);
+        handler.postDelayed(hideControls, 2600);
+    }
+
+    private final Runnable hideControls = new Runnable() {
+        @Override
+        public void run() {
+            if (controlsBar == null) {
+                return;
+            }
+            controlsBar.animate().alpha(0f).setDuration(220).withEndAction(
+                    new Runnable() {
+                        @Override
+                        public void run() {
+                            controlsBar.setVisibility(View.GONE);
+                        }
+                    }).start();
+        }
+    };
+
+    private final Runnable controlsTick = new Runnable() {
+        @Override
+        public void run() {
+            if (controlsBar != null && controlsBar.getVisibility() == View.VISIBLE) {
+                updateControls();
+                handler.postDelayed(this, 500);
+            }
+        }
+    };
+
+    private void updateControls() {
+        if (controlsBar == null) {
+            return;
+        }
+        handler.removeCallbacks(controlsTick);
+        handler.postDelayed(controlsTick, 500);
+        boolean playable = active != null && active.player != null;
+        controlsToggle.setAlpha(playable ? 1f : 0.35f);
+        if (!playable) {
+            controlsToggle.setText("\u25B6");
+            controlsTime.setText(active == null ? "" : "");
+            return;
+        }
+        Player player = active.player;
+        long duration = player.getDuration();
+        long position = player.getCurrentPosition();
+        controlsToggle.setText(player.isPlaying() ? "\u2016\u2016" : "\u25B6");
+        if (duration > 0) {
+            controlsTime.setText(formatTime(position) + "   -" + formatTime(duration - position));
+        } else {
+            controlsTime.setText(formatTime(position));
+        }
+    }
+
+    private static String formatTime(long millis) {
+        if (millis < 0) {
+            millis = 0;
+        }
+        long total = millis / 1000;
+        return String.format(java.util.Locale.US, "%d:%02d", total / 60, total % 60);
     }
 
     private void togglePause() {
