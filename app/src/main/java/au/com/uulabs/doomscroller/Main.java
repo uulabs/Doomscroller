@@ -96,6 +96,8 @@ public class Main extends Activity {
     private boolean filling;
     private boolean paused;
     private boolean wantNext;
+    /** +1 for a forward swap, -1 when going back, so motion matches the swipe. */
+    private float swapDirection = 1f;
     private boolean lastLandscape;
     private GestureDetector gestures;
     private WebView probe;
@@ -141,6 +143,8 @@ public class Main extends Activity {
                 if (Math.abs(dy) < 110 || Math.abs(vy) < 420) {
                     return false;
                 }
+                stage.performHapticFeedback(
+                        android.view.HapticFeedbackConstants.CLOCK_TICK);
                 if (dy < 0) {
                     next();
                 } else {
@@ -773,8 +777,9 @@ public class Main extends Activity {
                     + "if(t.indexOf('more videos on tiktok')>=0)return 'END';"
                     + "var v=document.querySelector('video');"
                     + "if(!v)return 'NOSTREAM';"
-                    + "if(v.muted){v.muted=false;}"
-                    + "if(v.paused&&!v.ended&&v.currentTime<0.6){try{v.play();}catch(e){}}"
+                    + "if(window.__uuActive&&v.muted){v.muted=false;}"
+                    + "if(window.__uuActive&&v.paused&&!v.ended"
+                    + "&&v.currentTime<0.6){try{v.play();}catch(e){}}"
                     + "if(v.ended)return 'END';"
                     // A stalled playhead is only an ending when the element is
                     // not waiting for data. Buffering looks identical otherwise,
@@ -987,7 +992,7 @@ public class Main extends Activity {
 
     /** Records each subject drawn, so variety can be measured rather than felt. */
     private void traceWord(String word) {
-        try {
+        if (BuildConfig.DEBUG) try {
             java.io.FileOutputStream f = new java.io.FileOutputStream(
                     new java.io.File(getFilesDir(), "word.log"), true);
             f.write((word + "\n").getBytes("UTF-8"));
@@ -1238,8 +1243,92 @@ public class Main extends Activity {
         }
     }
 
+    /**
+     * Slides a clip in from the direction it was swiped from. Without this a
+     * swap is instant and the gesture is indistinguishable from one that was
+     * never received.
+     */
+    /**
+     * Page players keep running when their tab is not visible. A prefetched
+     * TikTok is loaded long before it is shown, so it must stay silent until it
+     * becomes the clip on screen, and be silenced again when it is dropped -
+     * otherwise its audio plays over whatever replaced it.
+     */
+    private static final String JS_ACTIVE =
+            "(function(){window.__uuActive=true;"
+                    + "try{var vs=document.querySelectorAll('video');"
+                    + "for(var i=0;i<vs.length;i++){vs[i].muted=false;}}catch(e){}})()";
+
+    private static final String JS_IDLE =
+            "(function(){window.__uuActive=false;"
+                    + "try{var vs=document.querySelectorAll('video');"
+                    + "for(var i=0;i<vs.length;i++){vs[i].muted=true;"
+                    + "vs[i].pause();}}catch(e){}})()";
+
+    private void silenceAndDestroy(final WebView web) {
+        try {
+            web.evaluateJavascript(JS_IDLE, null);
+            web.loadUrl("about:blank");
+        } catch (Exception ignored) {
+        }
+        // Destroying straight away can skip the unload above, leaving the
+        // element playing with nothing left to stop it.
+        handler.postDelayed(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    web.destroy();
+                } catch (Exception ignored) {
+                }
+            }
+        }, 400);
+    }
+
+    private void slideIn(View v, float from) {
+        int h = stage.getHeight() > 0 ? stage.getHeight()
+                : getResources().getDisplayMetrics().heightPixels;
+        v.animate().cancel();
+        v.setTranslationY(from * h * 0.18f);
+        v.setAlpha(0.35f);
+        if (BuildConfig.DEBUG) try {
+            java.io.FileOutputStream f = new java.io.FileOutputStream(
+                    new java.io.File(getFilesDir(), "motion.log"), true);
+            f.write(("slide " + from + "\n").getBytes("UTF-8"));
+            f.close();
+        } catch (Exception ignored) {
+        }
+        v.animate()
+                .translationY(0f)
+                .alpha(1f)
+                .setDuration(200)
+                .setInterpolator(new android.view.animation.DecelerateInterpolator())
+                .start();
+    }
+
+    /** Acknowledges a swipe that could not swap yet: the screen lifts and returns. */
+    private void nudge(float direction) {
+        if (active == null || active.rootView == null) {
+            return;
+        }
+        int h = stage.getHeight() > 0 ? stage.getHeight()
+                : getResources().getDisplayMetrics().heightPixels;
+        final View v = active.rootView;
+        v.animate().cancel();
+        v.animate()
+                .translationY(direction * h * 0.035f)
+                .setDuration(110)
+                .withEndAction(new Runnable() {
+                    @Override
+                    public void run() {
+                        v.animate().translationY(0f).setDuration(150).start();
+                    }
+                })
+                .start();
+    }
+
     private void next() {
         if (pending == null) {
+            nudge(-swapDirection);
             refreshLoading();
             // Nothing buffered: remember the swipe and swap as soon as a slot is
             // ready, so a fast scroll never appears to do nothing.
@@ -1253,7 +1342,7 @@ public class Main extends Activity {
         pending = null;
         current = active.item;
         remember(current.toString());
-        try {
+        if (BuildConfig.DEBUG) try {
             java.io.FileOutputStream f = new java.io.FileOutputStream(
                     new java.io.File(getFilesDir(), "play.log"), true);
             f.write((current.source + " " + current.id + "\n").getBytes("UTF-8"));
@@ -1261,7 +1350,7 @@ public class Main extends Activity {
         } catch (Exception ignored) {
         }
         if (old != null) {
-            history.push(new Ready(old.item, old.url, false, false));
+            history.push(new Ready(old.item, old.url, old.web != null, false));
             if (history.size() > 20) {
                 history.removeLast();
             }
@@ -1270,11 +1359,13 @@ public class Main extends Activity {
                 old.player.release();
             }
             if (old.web != null) {
-                old.web.destroy();
+                silenceAndDestroy(old.web);
             }
             stage.removeView(old.rootView);
         }
         active.rootView.setVisibility(View.VISIBLE);
+        slideIn(active.rootView, swapDirection);
+        swapDirection = 1f;
         if (active.player != null
                 && active.player.getPlaybackState() == Player.STATE_READY) {
             active.rendered = true;
@@ -1283,6 +1374,7 @@ public class Main extends Activity {
             // The page paints its own surface; the face is only for a feed with
             // nothing on screen at all.
             setLoading(false);
+            active.web.evaluateJavascript(JS_ACTIVE, null);
             // A provider player reports nothing when a clip finishes - and an
             // advert can hold it indefinitely - so a page slot is capped and
             // the feed moves on.
@@ -1327,7 +1419,7 @@ public class Main extends Activity {
                 pending.player.release();
             }
             if (pending.web != null) {
-                pending.web.destroy();
+                silenceAndDestroy(pending.web);
             }
             stage.removeView(pending.rootView);
             pending = null;
@@ -1335,6 +1427,7 @@ public class Main extends Activity {
         synchronized (ready) {
             ready.addFirst(back);
         }
+        swapDirection = -1f;
         wantNext = true;
         pump();
     }
