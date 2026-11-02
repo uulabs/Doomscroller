@@ -2,6 +2,18 @@ plugins {
     id "com.android.application"
 }
 
+// Signing material lives OUTSIDE this repository, beside the other UU Labs
+// keys, so it can never be committed. Point UU_DOOMSCROLLER_KEYSTORE at the
+// properties file to use another location; without it a release build simply
+// comes out unsigned rather than failing.
+def signingPropsFile = new File(
+        System.getenv("UU_DOOMSCROLLER_KEYSTORE")
+                ?: "${System.properties['user.home']}/Work/Codex/UULabs/UULabsKeys/Doomscroller/keystore.properties")
+def signingProps = new Properties()
+if (signingPropsFile.exists()) {
+    signingPropsFile.withInputStream { signingProps.load(it) }
+}
+
 android {
     namespace "au.com.uulabs.doomscroller"
     compileSdk 36
@@ -11,7 +23,22 @@ android {
         minSdk 26
         targetSdk 35
         versionCode 1
-        versionName "0.1"
+        versionName "0.1.0"
+    }
+
+    // Two distributions from one codebase. `play` never installs an update
+    // itself; `selfupdate` does, which is exactly the behaviour Play Protect
+    // classifies as a dropper, so it must never be the Play build.
+    flavorDimensions += "distribution"
+    productFlavors {
+        play {
+            dimension "distribution"
+            buildConfigField "boolean", "SELF_UPDATE", "false"
+        }
+        selfupdate {
+            dimension "distribution"
+            buildConfigField "boolean", "SELF_UPDATE", "true"
+        }
     }
 
     compileOptions {
@@ -19,10 +46,28 @@ android {
         targetCompatibility JavaVersion.VERSION_17
     }
 
+    signingConfigs {
+        if (signingPropsFile.exists()) {
+            release {
+                storeFile rootProject.file(signingProps['storeFile'])
+                storePassword signingProps['storePassword']
+                keyAlias signingProps['keyAlias']
+                keyPassword signingProps['keyPassword']
+            }
+        }
+    }
+
     buildTypes {
         release {
             minifyEnabled false
+            if (signingPropsFile.exists()) {
+                signingConfig signingConfigs.release
+            }
         }
+    }
+
+    buildFeatures {
+        buildConfig true
     }
 }
 
@@ -30,4 +75,5 @@ dependencies {
     implementation "androidx.media3:media3-exoplayer:1.11.1"
     implementation "androidx.media3:media3-ui:1.11.1"
     implementation "androidx.media3:media3-exoplayer-hls:1.11.1"
+    implementation "androidx.core:core:1.13.1"
 }

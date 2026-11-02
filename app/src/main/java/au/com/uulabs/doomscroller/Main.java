@@ -161,6 +161,7 @@ public class Main extends Activity {
         fill();
         startLoadingWatch();
         showDisclaimerIfNeeded();
+        Updater.check(this);
     }
 
     @Override
@@ -757,6 +758,12 @@ public class Main extends Activity {
                     // paused, the clip is over - however the page chose to say so.
                     + "var v=document.querySelector('video');"
                     + "if(!v)return 'NOSTREAM';"
+                    // Provider players autoplay muted, because browsers refuse
+                    // audible autoplay. The app is the user's gesture, so the
+                    // element is unmuted and started here.
+                    + "if(v.muted){v.muted=false;}"
+                    + "if(v.paused&&!v.ended){try{v.play();}catch(e){}}"
+                    + "if(v.muted){return 'MUTED';}"
                     + "var now=Date.now();"
                     + "var w=window.__uuWatch=window.__uuWatch||{t:-1,at:now,pausedAt:0};"
                     + "if(v.ended)return 'END';"

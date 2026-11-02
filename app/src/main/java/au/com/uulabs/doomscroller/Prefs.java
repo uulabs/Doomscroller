@@ -14,6 +14,7 @@ public final class Prefs {
     private static final String KEY_SOURCES = "sources";
     private static final String KEY_LANDSCAPE = "allow_landscape";
     private static final String KEY_DISCLAIMER = "disclaimer_accepted";
+    private static final String KEY_UPDATE_AT = "update_checked_at";
     private static final String KEY_SEEN_IDS = "seen_ids";
     private static final String KEY_BAG = "bag_";
 
@@ -39,6 +40,14 @@ public final class Prefs {
             copy.add("en");
         }
         sp(c).edit().putStringSet(KEY_LANGS, copy).apply();
+    }
+
+    public static long lastUpdateCheck(Context c) {
+        return sp(c).getLong(KEY_UPDATE_AT, 0L);
+    }
+
+    public static void setLastUpdateCheck(Context c, long at) {
+        sp(c).edit().putLong(KEY_UPDATE_AT, at).apply();
     }
 
     public static boolean disclaimerAccepted(Context c) {
