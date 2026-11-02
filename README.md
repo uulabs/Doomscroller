@@ -4,11 +4,10 @@ A serverless, keyless, login-free Android app that plays an endless random portr
 video feed assembled from several public sources.
 
 > **Experimental — just for a laugh.** This exists to see what a feed with no
-> algorithm at all would look like: no profile, no history, no ranking, just a
-> random subject word and whatever a stranger can find. It is a toy, not a
-> product. There is no support, no roadmap and no promise it keeps working —
-> every source it uses is an undocumented surface that the platform it belongs
-> to can close whenever it likes.
+> algorithm at all would look like: no profile, no history, no ranking. It is a
+> toy, not a product. There is no support, no roadmap and no promise it keeps
+> working — every source it uses is an undocumented surface that the platform it
+> belongs to can close whenever it likes.
 
 - **No account, no server, no API key.** Every video is found on the device at the
   moment it is needed, from a randomly chosen subject word.
@@ -25,6 +24,34 @@ video feed assembled from several public sources.
 
 ![TikTok](docs/shot-tiktok.png)
 
+
+## How it picks
+
+There is one fixed input, and it is a list of words.
+
+On each draw the app picks one of the languages you enabled, then one word from
+that language at random, and searches each source for it. A word cannot come
+round again until twelve others have been used, which is what stops the feed
+collapsing into one subject.
+
+The words are ordinary nouns and activities — `cake`, `bonsai`, `lighthouse`,
+`yodel` — held in [`Vocab.java`](app/src/main/java/au/com/uulabs/doomscroller/Vocab.java):
+
+| Language | Words | | Language | Words |
+| --- | --- | --- | --- | --- |
+| English | 69 | | Russian | 7 |
+| Japanese | 16 | | Arabic | 7 |
+| Chinese | 14 | | Hindi | 7 |
+| Korean | 11 | | Indonesian | 6 |
+| Spanish | 10 | | Turkish | 6 |
+| Portuguese | 9 | | Thai | 6 |
+| French | 9 | | | |
+| German | 8 | | | |
+| Italian | 8 | | | |
+
+193 words in total. Nothing else is curated: no list of videos, channels or
+creators, and the word decides only what gets *asked for*, never what comes
+back. The results themselves are whatever the platform returns at that moment.
 
 ## Sources
 
