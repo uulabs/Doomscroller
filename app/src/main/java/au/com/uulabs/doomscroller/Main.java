@@ -298,11 +298,17 @@ public class Main extends Activity {
         if (active == null) {
             return true;
         }
+        // Once a clip has put a frame on screen it is never covered again, even
+        // if it stutters back into buffering. Otherwise a player that re-buffers
+        // would flash the face over a video that is plainly playing.
+        if (active.rendered) {
+            return false;
+        }
         if (active.player != null) {
             int state = active.player.getPlaybackState();
             return state != Player.STATE_READY && state != Player.STATE_ENDED;
         }
-        return !active.rendered;   // a page player only reports itself
+        return true;
     }
 
     /** A steady tick keeps the face in step with what is actually visible. */
@@ -382,17 +388,27 @@ public class Main extends Activity {
 
     private void startLoadingWatch() {
         handler.postDelayed(new Runnable() {
+            long blankSince;
+
             @Override
             public void run() {
                 if (loadingView != null) {
                     boolean blank = screenIsBlank();
-                    if (blank != (loadingView.getVisibility() == View.VISIBLE)) {
-                        setLoading(blank);
+                    long now = System.currentTimeMillis();
+                    if (!blank) {
+                        blankSince = 0;
+                    } else if (blankSince == 0) {
+                        blankSince = now;
+                    }
+                    boolean settled = blank && blankSince != 0
+                            && now - blankSince > 700;
+                    if (settled != (loadingView.getVisibility() == View.VISIBLE)) {
+                        setLoading(settled);
                     }
                 }
-                handler.postDelayed(this, 900);
+                handler.postDelayed(this, 400);
             }
-        }, 900);
+        }, 400);
     }
 
     private void setLoading(boolean show) {
@@ -753,6 +769,10 @@ public class Main extends Activity {
                     + "var t=b.toLowerCase();"
                     + "if(t.indexOf('currently unavailable')>=0"
                     + "||t.indexOf('video unavailable')>=0)return 'GONE';"
+                    // TikTok replaces a finished clip with this card. Fighting it
+                    // by resuming playback is what made it strobe; the card is
+                    // simply the end of the clip, so the feed moves on.
+                    + "if(t.indexOf('more videos on tiktok')>=0)return 'END';"
                     // The playhead is the only signal that cannot lie about a
                     // provider player. When it stops moving, or the element sits
                     // paused, the clip is over - however the page chose to say so.
@@ -762,8 +782,7 @@ public class Main extends Activity {
                     // audible autoplay. The app is the user's gesture, so the
                     // element is unmuted and started here.
                     + "if(v.muted){v.muted=false;}"
-                    + "if(v.paused&&!v.ended){try{v.play();}catch(e){}}"
-                    + "if(v.muted){return 'MUTED';}"
+                    + "if(v.paused&&!v.ended&&v.currentTime<0.6){try{v.play();}catch(e){}}"
                     + "var now=Date.now();"
                     + "var w=window.__uuWatch=window.__uuWatch||{t:-1,at:now,pausedAt:0};"
                     + "if(v.ended)return 'END';"
