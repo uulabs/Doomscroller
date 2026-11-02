@@ -130,6 +130,9 @@ public class Main extends Activity {
         String url;
         long shownAt;
         boolean rendered;
+        boolean sizeKnown;     // the decoded stream has reported its geometry
+        float displayRatio;    // width * pixel ratio / height
+        boolean rejected;      // refused admission, so never history
         ExoPlayer player;      // null for page slots
         PlayerView view;       // null for page slots
         WebView web;           // set for page slots
@@ -739,7 +742,19 @@ public class Main extends Activity {
         });
     }
 
+    /** Debug only: a known 1280x720 stream, whatever the sources say. */
+    private Ready landscapeProbe() {
+        String url = "https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/360/"
+                + "Big_Buck_Bunny_360_10s_1MB.mp4";
+        Sources.Item item = new Sources.Item("Probe", "landscape", "probe",
+                "mp4", url, 640, 360);
+        return new Ready(item, url, false, true);
+    }
+
     private Ready produce() {
+        if (BuildConfig.DEBUG && Prefs.probeLandscape(this)) {
+            return landscapeProbe();
+        }
         Set<String> sources = Prefs.sources(Main.this);
         if (sources.isEmpty()) {
             return null;
@@ -982,7 +997,44 @@ public class Main extends Activity {
                 boolean blind = value != null && value.contains("NOSTREAM");
                 int next = blind ? attempt + 1 : 0;
                 boolean giveUp = gone || ended || (blind && next >= 8);
-                boolean isActive = active != null && active.web == view;
+                final boolean isActive = active != null && active.web == view;
+                final Slot watched = isActive ? active
+                        : (pending != null && pending.web == view ? pending : null);
+                if (watched != null && !Prefs.landscapeAllowed(Main.this)) {
+                    view.evaluateJavascript(PAGE_SIZE_JS, new ValueCallback<String>() {
+                        @Override
+                        public void onReceiveValue(String size) {
+                            String clean = size == null ? "?" : size.replace("\"", "");
+                            int bar = clean.indexOf('x');
+                            if (bar <= 0) {
+                                return;      // still unknown, keep waiting
+                            }
+                            int w;
+                            int h;
+                            try {
+                                w = Integer.parseInt(clean.substring(0, bar).trim());
+                                h = Integer.parseInt(clean.substring(bar + 1).trim());
+                            } catch (NumberFormatException e) {
+                                return;
+                            }
+                            if (w <= 0 || h <= 0) {
+                                return;
+                            }
+                            watched.sizeKnown = true;
+                            watched.displayRatio = (float) w / (float) h;
+                            igTrace("page size " + w + "x" + h + " src=" + watched.item.source);
+                            if (watched.displayRatio > 1.0f) {
+                                if (watched == pending) {
+                                    rejectSlot(watched);
+                                } else {
+                                    disposeActiveAndAdvance(watched);
+                                }
+                            } else if (watched == pending) {
+                                maybePromotePending();
+                            }
+                        }
+                    });
+                }
                 if (isActive && !gone && !ended && !blind) {
                     active.rendered = true;   // something is genuinely on screen
                     setLoading(false);
@@ -1337,7 +1389,8 @@ public class Main extends Activity {
             stage.addView(slot.rootView, match());
             pending = slot;
             fill();
-            if (active == null || wantNext) {
+            if ((active == null || wantNext) && (portraitVerified(slot)
+                    || Prefs.landscapeAllowed(Main.this))) {
                 wantNext = false;
                 next();
             }
@@ -1379,14 +1432,41 @@ public class Main extends Activity {
         slot.player.setVolume(0f);
         slot.view = new PlayerView(this);
         slot.view.setUseController(false);
-        slot.view.setResizeMode(r.landscape
-                ? androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_FIT
-                : androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_ZOOM);
+        // FIT always: cropping to fill hides part of the picture and made a
+        // landscape clip look like a portrait one that had been zoomed.
+        slot.view.setResizeMode(androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_FIT);
         slot.view.setPlayer(slot.player);
         slot.rootView = slot.view;
-        slot.rootView.setVisibility(View.GONE);
-        stage.addView(slot.rootView, match());
+        slot.rootView.setVisibility(View.VISIBLE);
+        stage.addView(slot.rootView, 0, match());
         slot.player.addListener(new Player.Listener() {
+
+            @Override
+            public void onVideoSizeChanged(androidx.media3.common.VideoSize size) {
+                float ratio = 0f;
+                boolean known = false;
+                if (size.height > 0 && size.width > 0 && size.pixelWidthHeightRatio > 0
+                        && !Float.isNaN(size.pixelWidthHeightRatio)
+                        && !Float.isInfinite(size.pixelWidthHeightRatio)) {
+                    ratio = size.width * size.pixelWidthHeightRatio / size.height;
+                    known = true;
+                }
+                created.sizeKnown = known;
+                created.displayRatio = ratio;
+                igTrace("size " + size.width + "x" + size.height
+                        + " ratio=" + ratio + " src=" + created.item.source);
+                if (!Prefs.landscapeAllowed(Main.this) && known && ratio > 1.0f) {
+                    // Landscape must never reach the screen in portrait-only.
+                    if (pending == created) {
+                        rejectSlot(created);
+                    } else if (active == created) {
+                        setLoading(true);
+                        disposeActiveAndAdvance(created);
+                    }
+                } else if (known && pending == created && portraitVerified(created)) {
+                    maybePromotePending();
+                }
+            }
 
             @Override
             public void onPlaybackStateChanged(int playbackState) {
@@ -1406,7 +1486,12 @@ public class Main extends Activity {
                 if (playbackState == Player.STATE_READY && !paused) {
                     created.rendered = true;
                     setLoading(false);
-                    created.player.play();
+                    if (portraitVerified(created)) {
+                        created.player.play();
+                    } else {
+                        // Measured geometry has not arrived yet; stay silent.
+                        created.player.pause();
+                    }
                 } else if (playbackState == Player.STATE_ENDED) {
                     // The feed never stops: a finished clip rolls straight on to
                     // the next one, which is already buffered behind it.
@@ -1473,6 +1558,12 @@ public class Main extends Activity {
             "(function(){window.__uuActive=true;"
                     + "try{var vs=document.querySelectorAll('video');"
                     + "for(var i=0;i<vs.length;i++){vs[i].muted=false;}}catch(e){}})()";
+
+    /** Reads the page player's intrinsic size; layout size would prove nothing. */
+    private static final String PAGE_SIZE_JS =
+            "(function(){try{var v=document.querySelector('video');"
+                    + "if(!v||!v.videoWidth||!v.videoHeight)return '?';"
+                    + "return v.videoWidth+'x'+v.videoHeight;}catch(e){return '?';}})()";
 
     /** Reads the page player's position and length, in milliseconds. */
     private static final String PAGE_TIME_JS =
@@ -1565,6 +1656,82 @@ public class Main extends Activity {
                 .start();
     }
 
+    /**
+     * Portrait-only is decided from the decoded stream, not from what a source
+     * claimed. Unknown geometry is not evidence of portrait, so an unmeasured
+     * clip is never admitted while landscape is disallowed.
+     */
+    private boolean portraitVerified(Slot slot) {
+        if (slot == null) {
+            return false;
+        }
+        if (Prefs.landscapeAllowed(this)) {
+            return true;
+        }
+        return slot.sizeKnown && slot.displayRatio <= 1.0f;
+    }
+
+    /** Promotes a verified clip only when the feed is actually waiting for one. */
+    private void maybePromotePending() {
+        if (pending == null || !portraitVerified(pending)) {
+            return;
+        }
+        if (active == null || wantNext) {
+            wantNext = false;
+            next();
+        }
+    }
+
+    /** Hides a clip that must not be seen, then asks for a replacement. */
+    private void disposeActiveAndAdvance(Slot slot) {
+        if (slot != active) {
+            return;
+        }
+        slot.rejected = true;
+        if (slot.player != null) {
+            try {
+                slot.player.setVolume(0f);
+                slot.player.pause();
+            } catch (Exception ignored) {
+            }
+        }
+        if (slot.rootView != null) {
+            slot.rootView.setVisibility(View.INVISIBLE);
+        }
+        wantNext = true;
+        next();
+    }
+
+    private void rejectSlot(Slot slot) {
+        if (slot == null) {
+            return;
+        }
+        if (slot == pending) {
+            pending = null;
+        }
+        if (slot.player != null) {
+            try {
+                slot.player.setVolume(0f);
+                slot.player.stop();
+                slot.player.release();
+            } catch (Exception ignored) {
+            }
+        }
+        if (slot.web != null) {
+            silenceAndDestroy(slot.web);
+        }
+        if (slot.rootView != null && slot.rootView.getParent() == stage) {
+            stage.removeView(slot.rootView);
+        }
+        wantNext = true;
+        handler.post(new Runnable() {
+            @Override
+            public void run() {
+                pump();
+            }
+        });
+    }
+
     private void next() {
         if (pending == null) {
             if (active != null) {
@@ -1582,6 +1749,11 @@ public class Main extends Activity {
             pump();
             return;
         }
+        if (!portraitVerified(pending) && !Prefs.landscapeAllowed(this)) {
+            // Not admitted yet: keep it hidden and silent, wait for a measurement.
+            wantNext = true;
+            return;
+        }
         wantNext = false;
         Slot old = active;
         active = pending;
@@ -1596,7 +1768,9 @@ public class Main extends Activity {
         } catch (Exception ignored) {
         }
         if (old != null) {
-            history.push(new Ready(old.item, old.url, old.web != null, false));
+            if (!old.rejected) {
+                history.push(new Ready(old.item, old.url, old.web != null, false));
+            }
             if (history.size() > 20) {
                 history.removeLast();
             }
@@ -1626,6 +1800,7 @@ public class Main extends Activity {
             }, 280);
         }
         active.rootView.setVisibility(View.VISIBLE);
+        active.rootView.bringToFront();
         active.shownAt = System.currentTimeMillis();
         slideIn(active.rootView, swapDirection);
         swapDirection = 1f;
@@ -1933,6 +2108,14 @@ public class Main extends Activity {
             settingsPanel = null;
             applyOrientation();
             Sources.setAllowLandscape(Prefs.landscapeAllowed(this));
+            igTrace("settings close: landscape=" + Prefs.landscapeAllowed(this)
+                    + " active=" + (active != null)
+                    + " verified=" + (active != null && portraitVerified(active))
+                    + " known=" + (active != null && active.sizeKnown)
+                    + " ratio=" + (active == null ? -1 : active.displayRatio));
+            if (active != null && !portraitVerified(active)) {
+                disposeActiveAndAdvance(active);
+            }
             if (active != null && active.player != null && !paused) {
                 active.player.play();
             }

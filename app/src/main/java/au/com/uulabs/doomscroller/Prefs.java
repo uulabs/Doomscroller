@@ -60,6 +60,11 @@ public final class Prefs {
         return out;
     }
 
+    /** Debug only: feed one known landscape stream, to test the portrait gate. */
+    public static boolean probeLandscape(Context c) {
+        return sp(c).getBoolean("probe_landscape", false);
+    }
+
     /** Whether a touch brings up the playback bar. */
     public static boolean controlsEnabled(Context c) {
         return sp(c).getBoolean(KEY_CONTROLS, true);
