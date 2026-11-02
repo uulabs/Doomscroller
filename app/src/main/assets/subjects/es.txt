@@ -67,3 +67,65 @@ cocido
 fabada
 horchata
 churrería
+coches japoneses
+drift
+tuning
+circuito
+rally
+moto
+furgoneta camper
+autocaravana
+tren de alta velocidad
+puerto
+mercado de pescado
+fiesta mayor
+toros bravos
+encierro
+fallas de valencia
+fuegos artificiales
+gigantes y cabezudos
+bailaora
+cantaor
+palmas
+cajón flamenco
+paella valenciana
+tapas bar
+vermut
+chocolatería
+cafetería
+terraza
+siesta
+paseo marítimo
+acantilado
+calas
+isla
+senderismo
+vía ferrata
+barranquismo
+escalada en bloque
+fútbol sala
+balonmano
+atletismo
+maratón
+carrera popular
+campeonato
+torneo
+hinchada
+estrella del fútbol
+cantera
+entrenamiento
+gimnasio
+boxeo
+lucha libre
+pelea
+protesta
+manifestación
+huelga
+pancarta
+policía antidisturbios
+carga policial
+vecinos discutiendo
+discusión
+juzgado
+juicio
+abogado

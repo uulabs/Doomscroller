@@ -39,19 +39,20 @@ The words are ordinary nouns and activities, held one per line in
 on. Adding subjects means editing a text file, not touching code.
 
 | Language | Subjects | | Language | Subjects |
-| --- | --- | --- | --- | --- |
-| English | 851 | | Italian | 51 |
-| Japanese | 131 | | Russian | 44 |
-| Chinese | 121 | | Arabic | 28 |
-| Korean | 54 | | Hindi | 32 |
-| Spanish | 68 | | Indonesian | 30 |
-| Portuguese | 58 | | Turkish | 30 |
-| French | 63 | | Thai | 24 |
-| German | 60 | | | |
+| --- | --- | --- | --- |
+| English | 1068 | | Italian | 93 |
+| Japanese | 310 | | Russian | 82 |
+| Chinese | 329 | | Arabic | 49 |
+| Korean | 175 | | Hindi | 56 |
+| Spanish | 130 | | Indonesian | 51 |
+| Portuguese | 109 | | Turkish | 51 |
+| French | 117 | | Thai | 45 |
+| German | 101 | | | |
 
-1645 subjects in total, covering motorsport and cars, computing and security,
+2766 subjects in total, covering motorsport and cars, computing and security,
 space, earth science, animals, food, every mainstream sport, craft, music,
-places, transport, industry, gaming, fashion, home and the deliberately odd.
+places, transport, industry, gaming, fashion, home, Japanese car culture
+(JDM, kei cars, touge runs) and street-level confrontation.
 Nothing else is curated: no list of videos, channels or creators. The word
 decides only what gets *asked for*, never what comes back. The results are
 whatever the platform returns at that moment.

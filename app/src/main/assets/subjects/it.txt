@@ -50,3 +50,45 @@ apicoltura
 ceramica
 vetro di murano
 maschere
+auto giapponesi
+drift
+tuning
+circuito
+rally
+moto
+camper
+campeggio
+treno veloce
+metro
+porto di pesca
+mercato rionale
+sagra di paese
+palio
+fuochi d'artificio
+carnevale di ivrea
+maschere veneziane
+trattoria
+osteria
+aperitivo
+piazza
+lungomare
+scogliere
+isola
+trekking
+ferrata
+canyoning
+palestra di roccia
+stadio
+tifosi
+ultras
+rissa
+manifestazione
+sciopero
+corteo
+polizia antisommossa
+idrante
+tribunale
+avvocato
+vicini che litigano
+ingorgo
+parcheggio selvaggio
