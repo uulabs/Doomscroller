@@ -555,6 +555,7 @@ public class Main extends Activity {
                             && now - lastActivePing > 1200) {
                         lastActivePing = now;
                         active.web.evaluateJavascript(JS_ACTIVE, null);
+
                     }
                     boolean settled = blank && blankSince != 0
                             && now - blankSince > 700;
@@ -1054,6 +1055,17 @@ public class Main extends Activity {
             + "if(tries>12){clearInterval(t);}},600);})()";
 
     /** Layout census of the player's overlay, for deciding what to hide. */
+    /**
+     * Restyles Instagram's embed. Hiding the whole post around the clip was
+     * tried and stops it rendering, so this only removes the obvious chrome and
+     * leaves the player's own boxes alone.
+     */
+    private static final String INSTAGRAM_STYLE_JS =
+            "(function(){try{var s=document.createElement('style');"
+                    + "s.textContent='header,footer,nav{display:none!important}'"
+                    + "+'html,body{background:#000!important;margin:0!important}';"
+                    + "document.head.appendChild(s);return '1';}catch(e){return '0';}})()";
+
     private static final String DOM_JS =
             "(function(){var out=[];try{var els=document.body.getElementsByTagName('*');"
             + "for(var i=0;i<els.length&&out.length<140;i++){var el=els[i];"
@@ -1240,21 +1252,7 @@ public class Main extends Activity {
                 public void onPageFinished(final WebView view, String url) {
                     watchForUnavailable(view, 0);
                     if (url != null && url.contains("instagram.com")) {
-                        // Instagram's embed draws an account header, a like and
-                        // comment footer and its own chrome. The feed shows one
-                        // clip and two of our buttons, so all of that goes.
-                        view.evaluateJavascript("(function(){try{"
-                                + "var s=document.createElement('style');"
-                                + "s.textContent='header,footer,section,nav{display:none!important}'"
-                                + "+'html,body{background:#000!important;margin:0!important;"
-                                + "overflow:hidden!important}'"
-                                + "+'article,.EmbeddedMedia,.EmbeddedMediaImage{"
-                                + "margin:0!important;padding:0!important;border:0!important;"
-                                + "max-width:100%!important;height:100vh!important}'"
-                                + "+'video,img{width:100%!important;height:100%!important;"
-                                + "object-fit:cover!important}';"
-                                + "document.head.appendChild(s);"
-                                + "}catch(e){}})()", null);
+                        view.evaluateJavascript(INSTAGRAM_STYLE_JS, null);
                     }
                     // The feed shows a video and two of our buttons, nothing else.
                     // Their page draws its own overlay on every Short, so it is

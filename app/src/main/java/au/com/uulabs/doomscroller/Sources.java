@@ -149,24 +149,60 @@ public final class Sources {
      * The index is not fresh, so dead links are expected; the player treats
      * Instagram's "post may have been removed" page as an ended clip.
      */
+    /**
+     * Discovered reels are pooled rather than fetched per draw. The search index
+     * throttles quickly, and each candidate is a usable clip for a while, so a
+     * pool of a few dozen keeps the feed supplied long after one request.
+     */
+    private static final java.util.ArrayDeque<String> IG_POOL =
+            new java.util.ArrayDeque<String>();
+    private static long igFreshAt;
+    private static long igBlockedUntil;
+
     private static List<Item> instagram(String word) throws IOException {
-        String query = "site:instagram.com/reel " + word;
-        String html = get("https://search.brave.com/search?q=" + enc(query), null);
-        Matcher m = Pattern.compile("instagram\\.com/reel/([A-Za-z0-9_-]{5,})")
-                .matcher(html);
+        long now = System.currentTimeMillis();
+        if (IG_POOL.isEmpty() && now > igBlockedUntil
+                && now - igFreshAt > 60_000L) {
+            igFreshAt = now;
+            try {
+                String query = "site:instagram.com/reel " + word;
+                String html = get("https://search.brave.com/search?q=" + enc(query), null);
+                Matcher m = Pattern.compile("instagram\\\\.com/reel/([A-Za-z0-9_-]{5,})")
+                        .matcher(html);
+                Set<String> seen = new HashSet<String>();
+                while (m.find()) {
+                    String id = m.group(1);
+                    if (seen.add(id)) {
+                        IG_POOL.addLast(id);
+                    }
+                }
+                if (IG_POOL.isEmpty()) {
+                    // Throttled or nothing indexed for this subject: rest a while.
+                    igBlockedUntil = now + 10 * 60_000L;
+                }
+            } catch (IOException e) {
+                igBlockedUntil = now + 10 * 60_000L;
+            }
+        }
         List<Item> out = new ArrayList<Item>();
-        Set<String> seen = new HashSet<String>();
-        int index = 0;
-        while (m.find() && out.size() < 12) {
-            if (index++ < 2) {
-                continue;
+        Set<String> taken = new HashSet<String>();
+        java.util.Random random = new java.util.Random();
+        for (int i = 0; i < 6 && !IG_POOL.isEmpty(); i++) {
+            int skip = random.nextInt(IG_POOL.size());
+            String id = null;
+            java.util.Iterator<String> it = IG_POOL.iterator();
+            for (int k = 0; it.hasNext(); k++) {
+                String candidate = it.next();
+                if (k == skip) {
+                    id = candidate;
+                    it.remove();
+                    break;
+                }
             }
-            String id = m.group(1);
-            if (!seen.add(id)) {
-                continue;
+            if (id != null && taken.add(id)) {
+                out.add(new Item(INSTAGRAM, id, "", "frame",
+                        "https://www.instagram.com/reel/" + id + "/embed/", 0, 0));
             }
-            out.add(new Item(INSTAGRAM, id, "", "frame",
-                    "https://www.instagram.com/reel/" + id + "/embed/", 0, 0));
         }
         return out;
     }
