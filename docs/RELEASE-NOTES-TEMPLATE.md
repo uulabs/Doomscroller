@@ -1,17 +1,25 @@
 # Release note template
 
-Every release description must carry this block, in addition to its own notes.
+Every release description carries this block, in addition to its own notes.
 
 ---
 
-## Google Play
+## Two APKs, and one warning
 
-The `-selfupdate` build downloads and installs its own updates. Google Play
-Protect classifies that behaviour as a dropper, so it must **never** be uploaded
-to Play. Only the `-play` build is eligible for Play submission; it checks for a
-newer version but opens the release page instead of installing anything.
+UU Doomscroller is not on Google Play and never will be; it is distributed here.
 
-Install one or the other, not both. They share an application id and a signer,
-so both can be installed over any earlier release and keep their settings.
+| File | Use |
+| --- | --- |
+| `...-standard.apk` | Installs nothing by itself. It reports a newer version and opens this release page. |
+| `...-selfupdate.apk` | The same app, but it downloads updates and hands them to the Android installer. |
 
-Verify a download with `shasum -a 256 -c SHA256SUMS`.
+**Google Play Protect will flag the self-update build as harmful.** That warning
+is not a false positive: downloading and launching an installer is exactly how a
+dropper behaves, so Play Protect cannot distinguish this app from one. The choice
+is whether to trust it.
+
+If you do not, install the standard build. The only function you give up is
+in-app updating - it will send you to this page to download each new version.
+
+Both builds share an application id and a signing key, so either installs over
+any earlier release and keeps your settings.

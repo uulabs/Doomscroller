@@ -64,20 +64,23 @@ point at your SDK; it is not committed.
 
 ## Releases
 
-Each release publishes two APKs and a `SHA256SUMS` file:
+UU Doomscroller is **not published on Google Play, and will not be**. It is
+distributed here as an APK.
 
 | File | Use |
 | --- | --- |
-| `UUDoomscroller-<version>-play.apk` | Google Play build. Checks for a newer version and opens the release page; it never downloads or installs anything. |
-| `UUDoomscroller-<version>-selfupdate.apk` | Direct build. Downloads the new version and hands it to the system installer. |
+| `UUDoomscroller-<version>-standard.apk` | Installs nothing by itself. When a newer version exists it says so and opens the release page; you download and install it. |
+| `UUDoomscroller-<version>-selfupdate.apk` | The same app, except it downloads updates and hands them to the Android installer itself. |
 
-Both are signed with the same key, so one installs over the other and over any
-earlier release, keeping settings.
+> **Google Play Protect will warn about the self-update build, and it is right
+> to.** Downloading and launching an installer is precisely the shape of a
+> dropper, so nothing about the app distinguishes it from one. If that behaviour
+> is not something you want to trust, use the standard build instead - the only
+> cost is that updating takes you to the release page rather than happening
+> inside the app.
 
-> **Google Play:** the `-selfupdate` build must never be uploaded there. It
-> downloads and launches an installer, which Play Protect classifies as a
-> dropper. Only the `-play` build is eligible for Play submission. This note
-> belongs in every release description as well.
+Both are signed with the same key and share an application id, so either
+installs over any earlier release and keeps your settings.
 
 Verify a download with:
 

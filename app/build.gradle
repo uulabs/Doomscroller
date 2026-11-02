@@ -22,16 +22,17 @@ android {
         applicationId "au.com.uulabs.doomscroller"
         minSdk 26
         targetSdk 35
-        versionCode 6
-        versionName "0.1.5"
+        versionCode 7
+        versionName "0.1.6"
     }
 
-    // Two distributions from one codebase. `play` never installs an update
-    // itself; `selfupdate` does, which is exactly the behaviour Play Protect
-    // classifies as a dropper, so it must never be the Play build.
+    // Two distributions from one codebase. `standard` never installs anything
+    // by itself; `selfupdate` downloads and launches an installer, which is the
+    // behaviour Play Protect flags as a dropper. Neither is distributed through
+    // Google Play.
     flavorDimensions += "distribution"
     productFlavors {
-        play {
+        standard {
             dimension "distribution"
             buildConfigField "boolean", "SELF_UPDATE", "false"
         }
