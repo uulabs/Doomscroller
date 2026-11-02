@@ -282,10 +282,10 @@ final class SettingsUi {
         aboutBody.addView(created);
 
         TextView experimental = new TextView(context);
-        experimental.setText("Experimental — just for a laugh. This exists to see what a "
-                + "feed with no algorithm at all would look like: no profile, no "
+        experimental.setText("Experimental, and just for a laugh. This exists to see what "
+                + "a feed with no algorithm at all would look like: no profile, no "
                 + "history, no ranking. It is a toy, not a product. There is no "
-                + "support, no roadmap and no promise it keeps working — every source "
+                + "support, no roadmap and no promise it keeps working. Every source "
                 + "it uses is an undocumented surface that the platform it belongs to "
                 + "can close whenever it likes.");
         experimental.setTextColor(MUTED);

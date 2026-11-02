@@ -3,10 +3,10 @@
 A serverless, keyless, login-free Android app that plays an endless random portrait
 video feed assembled from several public sources.
 
-> **Experimental — just for a laugh.** This exists to see what a feed with no
+> **Experimental, and just for a laugh.** This exists to see what a feed with no
 > algorithm at all would look like: no profile, no history, no ranking. It is a
 > toy, not a product. There is no support, no roadmap and no promise it keeps
-> working — every source it uses is an undocumented surface that the platform it
+> working. Every source it uses is an undocumented surface that the platform it
 > belongs to can close whenever it likes.
 
 - **No account, no server, no API key.** Every video is found on the device at the
@@ -31,7 +31,7 @@ Nothing is ranked, recommended or remembered about the person watching.
 
 Each draw takes a subject at random, searches every enabled source for it and
 plays whatever comes back first. Subjects are spent from a shuffled pool, so
-nothing returns until everything else has been used — including across
+nothing returns until everything else has been used, including across
 restarts.
 
 There is no list of videos, channels or creators anywhere. A subject decides
@@ -59,8 +59,8 @@ point at your SDK; it is not committed.
 
 ## Documentation
 
-- `STATUS.md` — current state, what works, what does not, and next steps.
-- `research/FINDINGS.md` — the research record behind the source choices.
+- `STATUS.md`: current state, what works, what does not, and next steps.
+- `research/FINDINGS.md`: the research record behind the source choices.
 
 ## Releases
 
