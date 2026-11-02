@@ -12,6 +12,13 @@ video feed assembled from several public sources.
   video, swipe down for the previous, tap to pause.
 - **Unfiltered by design.** A first-run notice says so before anything plays.
 
+| First run | Settings | Playing |
+| --- | --- | --- |
+| ![First run](docs/shot-disclaimer.png) | ![Settings](docs/shot-settings.png) | ![Playing](docs/shot-video.png) |
+
+![TikTok](docs/shot-tiktok.png)
+
+
 ## Sources
 
 | Source | Discovery | Playback |
@@ -35,3 +42,26 @@ point at your SDK; it is not committed.
 
 - `STATUS.md` — current state, what works, what does not, and next steps.
 - `research/FINDINGS.md` — the research record behind the source choices.
+
+## Releases
+
+Each release publishes two APKs and a `SHA256SUMS` file:
+
+| File | Use |
+| --- | --- |
+| `UUDoomscroller-<version>-play.apk` | Google Play build. Checks for a newer version and opens the release page; it never downloads or installs anything. |
+| `UUDoomscroller-<version>-selfupdate.apk` | Direct build. Downloads the new version and hands it to the system installer. |
+
+Both are signed with the same key, so one installs over the other and over any
+earlier release, keeping settings.
+
+> **Google Play:** the `-selfupdate` build must never be uploaded there. It
+> downloads and launches an installer, which Play Protect classifies as a
+> dropper. Only the `-play` build is eligible for Play submission. This note
+> belongs in every release description as well.
+
+Verify a download with:
+
+```sh
+shasum -a 256 -c SHA256SUMS
+```
