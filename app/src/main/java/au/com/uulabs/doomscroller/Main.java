@@ -173,6 +173,7 @@ public class Main extends Activity {
     }
 
     private void buildUi() {
+        Vocab.load(getAssets());
         ytResolver = new YoutubeResolver(this);
         root = new FrameLayout(this);
         root.setBackgroundColor(Color.BLACK);
@@ -937,71 +938,69 @@ public class Main extends Activity {
     /**
      * Draws a subject from a shuffled bag rather than independently at random.
      *
-     * Independent draws repeat: with sixty-odd words a repeat is likely within a dozen picks, and
-     * a repeated word returns the same search results, so the feed repeats with it. A bag spends
-     * every word once before any comes back, and it is stored, so quitting the app does not hand
-     * the same word out again.
+     * Independent draws repeat: even over a large list, a repeat is likely
+     * within a session, and a repeated word returns the same search results, so
+     * the feed repeats with it. A bag spends every subject once before any comes
+     * back, and it is stored, so quitting the app does not hand out the same
+     * word again either.
      */
-    private String drawFromBag(Vocab.Lang lang) {
-        java.util.List<String> bag = new ArrayList<String>();
-        String stored = Prefs.wordBag(this, lang.code);
+    private String pickWord() {
+        Set<String> langs = Prefs.languages(this);
+        List<String> pool = Vocab.pool(langs);
+        if (pool.isEmpty()) {
+            Set<String> fallback = new LinkedHashSet<String>();
+            fallback.add("en");
+            pool = Vocab.pool(fallback);
+        }
+        if (pool.isEmpty()) {
+            return "cake";
+        }
+        Set<String> allowed = new HashSet<String>(pool);
+
+        List<String> bag = new ArrayList<String>();
+        String stored = Prefs.wordBag(this, "all");
         if (stored != null && !stored.isEmpty()) {
             for (String w : stored.split("\n")) {
-                if (!w.isEmpty()) {
+                // Drop anything belonging to a language since switched off.
+                if (!w.isEmpty() && allowed.contains(w)) {
                     bag.add(w);
                 }
             }
         }
         if (bag.isEmpty()) {
-            for (String w : lang.words) {
-                bag.add(w);
-            }
+            bag.addAll(pool);
             Collections.shuffle(bag, rand);
         }
 
         String word = bag.remove(bag.size() - 1);
-        StringBuilder b = new StringBuilder();
+        StringBuilder remaining = new StringBuilder();
         for (String w : bag) {
-            if (b.length() > 0) {
-                b.append('\n');
+            if (remaining.length() > 0) {
+                remaining.append('\n');
             }
-            b.append(w);
+            remaining.append(w);
         }
-        Prefs.setWordBag(this, lang.code, b.toString());
-
-        synchronized (recentWords) {
-            recentWords.addFirst(word);
-            while (recentWords.size() > 12) {
-                recentWords.removeLast();
-            }
-        }
+        Prefs.setWordBag(this, "all", remaining.toString());
+        traceWord(word);
         return word;
     }
 
-    private String pickWord() {
-        Set<String> langs = Prefs.languages(this);
-        List<Vocab.Lang> pool = new ArrayList<Vocab.Lang>();
-        for (String code : langs) {
-            Vocab.Lang l = Vocab.byCode(code);
-            if (l != null) {
-                pool.add(l);
-            }
+    /** Records each subject drawn, so variety can be measured rather than felt. */
+    private void traceWord(String word) {
+        try {
+            java.io.FileOutputStream f = new java.io.FileOutputStream(
+                    new java.io.File(getFilesDir(), "word.log"), true);
+            f.write((word + "\n").getBytes("UTF-8"));
+            f.close();
+        } catch (Exception ignored) {
         }
-        if (pool.isEmpty()) {
-            pool.add(Vocab.byCode("en"));
-        }
-        Vocab.Lang chosen = pool.get(rand.nextInt(pool.size()));
-        return drawFromBag(chosen);
     }
 
+    /** Claims an item; false when another pass already has or has shown it. */
     private boolean rememberIfNew(Sources.Item item) {
         synchronized (seen) {
-            if (seen.contains(item.toString())) {
-                return false;
-            }
+            return seen.add(item.toString());
         }
-        remember(item.toString());
-        return true;
     }
 
     private List<Sources.Item> filter(List<Sources.Item> in) {

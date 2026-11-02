@@ -1,0 +1,69 @@
+# UU Doomscroller subjects (Spanish)
+paella
+fútbol
+flamenco
+playa
+tacos
+baile
+mercado
+guitarra
+tormenta
+bicicleta
+cocina
+montaña
+rugby
+panadería
+castillo
+catedral
+desierto
+volcán
+cascada
+bosque
+nieve
+surf
+skate
+yoga
+toros
+sanfermines
+fallas
+semana santa
+tapas
+jamón
+tortilla
+churros
+gazpacho
+sangría
+sevillanas
+castañuelas
+naranjas
+aceite de oliva
+olivar
+siesta
+pueblo blanco
+alhambra
+sagrada familia
+camino de santiago
+baloncesto
+tenis
+pádel
+escalada
+senderismo
+piragüismo
+esquí
+moto
+coche
+tren
+metro
+autobús
+mercado de abastos
+carnaval
+feria
+romería
+procesión
+marisco
+pulpo
+croquetas
+cocido
+fabada
+horchata
+churrería

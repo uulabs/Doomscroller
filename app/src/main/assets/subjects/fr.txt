@@ -1,0 +1,64 @@
+# UU Doomscroller subjects (French)
+fromage
+vélo
+marché
+cuisine
+montagne
+rugby
+boulangerie
+plage
+orage
+château
+cathédrale
+forêt
+neige
+désert
+cascade
+pâtisserie
+croissant
+baguette
+vin
+vignoble
+fromagerie
+charcuterie
+escargots
+crêpe
+galette
+raclette
+fondue
+cassoulet
+bouillabaisse
+macaron
+éclair
+marché de noël
+tour eiffel
+mont saint michel
+provence
+lavande
+alsace
+bretagne
+normandie
+corse
+pyrénées
+alpes
+seine
+canal
+vélo électrique
+randonnée
+escalade
+ski
+surf
+voile
+aviron
+pétanque
+échecs
+accordéon
+bal musette
+carnaval
+défilé
+feu d'artifice
+château de sable
+pêche
+apiculture
+poterie
+vitrail

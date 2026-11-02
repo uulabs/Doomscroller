@@ -1,0 +1,885 @@
+# UU Doomscroller subject vocabulary (English)
+# One subject per line. Blank lines and lines starting with # are ignored.
+
+# motorsport and cars
+formula 1
+rally driving
+drifting
+drag racing
+nascar
+karting
+motogp
+superbike racing
+rallycross
+hillclimb
+time attack
+autocross
+banger racing
+demolition derby
+monster truck
+off roading
+rock crawling
+overlanding
+campervan build
+hot rod
+rat rod
+classic car restoration
+muscle car
+supercar
+hypercar
+ev conversion
+engine swap
+turbocharger
+supercharger
+nitrous
+exhaust note
+dyno run
+wheel alignment
+paint correction
+vinyl wrap
+car detailing
+barn find
+junkyard find
+car auction
+motorcycle rebuild
+chopper build
+cafe racer
+scooter
+moped
+tuk tuk
+tractor pulling
+trucking
+road train
+bulldozer
+excavator
+crane
+forklift
+container ship
+tugboat
+hovercraft
+hydrofoil
+submarine
+glider
+microlight
+paramotor
+drone racing
+fpv flying
+rc car
+rc plane
+model rocketry
+
+# technology and computing
+hacking
+penetration testing
+capture the flag
+reverse engineering
+retro computing
+vintage computers
+linux ricing
+homelab
+self hosting
+nas build
+server rack
+networking
+fibre splicing
+soldering
+pcb design
+3d printing
+cnc machining
+laser cutting
+arduino
+raspberry pi
+esp32
+robotics
+quadcopter
+vr headset
+ar glasses
+mechanical keyboard
+cable management
+laptop repair
+phone repair
+screen replacement
+battery swap
+jailbreak
+custom rom
+emulation
+retro consoles
+arcade cabinet
+pinball machine
+speedrunning
+game mods
+indie games
+game development
+shaders
+ray tracing
+ai art
+image generation
+encryption
+privacy tools
+password cracking
+malware analysis
+bug bounty
+osint
+satellite tracking
+amateur radio
+software defined radio
+antenna build
+mesh network
+data hoarding
+tape storage
+floppy disks
+minidisc
+cassette tapes
+vinyl records
+cd collecting
+
+# space
+planets
+mars rover
+moon landing
+rocket launch
+satellites
+international space station
+spacewalk
+telescope
+astrophotography
+eclipse
+meteor shower
+aurora
+black holes
+nebula
+galaxies
+exoplanets
+solar flares
+gravity
+orbital mechanics
+star trails
+milky way
+comets
+asteroids
+particle physics
+collider
+quantum computing
+nuclear fusion
+magnetosphere
+
+# earth science and extreme nature
+volcanoes
+earthquakes
+tsunami
+glaciers
+ice cores
+caves
+sinkholes
+geysers
+hot springs
+coral reef
+tide pool
+bioluminescence
+deep sea
+anglerfish
+octopus
+giant squid
+sharks
+whales
+dolphins
+seals
+penguins
+polar bears
+arctic
+antarctic
+tundra
+taiga
+rainforest
+savanna
+wetlands
+mangroves
+desert
+sand dunes
+salt flat
+fjord
+canyon
+mesa
+monsoon
+tornado
+hurricane
+lightning
+hailstorm
+flood
+wildfire
+avalanche
+mudslide
+fossils
+dinosaurs
+amber
+minerals
+geodes
+crystals
+meteorite
+gold panning
+gem mining
+spelunking
+
+# animals
+horses
+donkeys
+camels
+alpacas
+llamas
+goats
+sheep
+cattle
+pigs
+chickens
+ducks
+geese
+turkeys
+rabbits
+guinea pigs
+hamsters
+ferrets
+parrots
+cockatoos
+owls
+eagles
+falcons
+hawks
+hummingbirds
+peacocks
+swans
+flamingos
+pelicans
+herons
+crows
+magpies
+pigeons
+racing pigeons
+bees
+beekeeping
+butterflies
+moths
+dragonflies
+ants
+termites
+spiders
+tarantulas
+snakes
+lizards
+geckos
+chameleons
+iguanas
+tortoises
+turtles
+frogs
+axolotls
+koi carp
+aquascaping
+reef tank
+crabs
+lobsters
+jellyfish
+starfish
+hermit crabs
+
+# food
+sourdough
+pizza oven
+smoker
+barbecue
+hot sauce
+fermentation
+kimchi making
+miso
+tofu
+pasta making
+gnocchi
+dumplings
+dim sum
+bao buns
+pho
+ramen
+curry
+biryani
+tagine
+couscous
+paella
+risotto
+tapas
+mezze
+sushi
+sashimi
+tempura
+teppanyaki
+hot pot
+pitmaster
+butchery
+charcuterie
+cheese making
+butter making
+yoghurt
+ice cream
+gelato
+sorbet
+chocolate tempering
+candy making
+fudge
+pastries
+croissants
+baguettes
+pretzels
+donuts
+churros
+baklava
+macarons
+fruit tart
+cheesecake
+wedding cake
+sugar work
+chocolate sculpture
+latte art
+coffee roasting
+espresso
+cold brew
+tea ceremony
+matcha
+bubble tea
+cocktail making
+bartending
+homebrew beer
+winemaking
+vineyard
+whisky distillery
+gin distillery
+sake brewing
+
+# sport
+football
+soccer
+rugby
+cricket
+baseball
+basketball
+netball
+ice hockey
+field hockey
+handball
+volleyball
+beach volleyball
+tennis
+badminton
+squash
+table tennis
+pickleball
+golf
+mini golf
+darts
+snooker
+pool
+bowling
+curling
+bobsleigh
+luge
+skeleton racing
+biathlon
+cross country skiing
+downhill skiing
+freestyle skiing
+ski jumping
+snowboarding
+speed skating
+figure skating
+ice dancing
+gymnastics
+parkour
+freerunning
+calisthenics
+crossfit
+weightlifting
+powerlifting
+strongman
+bodybuilding
+boxing
+kickboxing
+muay thai
+mixed martial arts
+wrestling
+judo
+karate
+taekwondo
+brazilian jiu jitsu
+fencing
+archery
+shooting sports
+triathlon
+marathon
+ultramarathon
+trail running
+orienteering
+rock climbing
+bouldering
+sport climbing
+free solo
+abseiling
+caving
+kayaking
+whitewater rafting
+canoeing
+paddleboarding
+surfing
+windsurfing
+kitesurfing
+wing foiling
+sailing
+rowing
+dragon boat
+swimming
+diving
+freediving
+water polo
+synchronised swimming
+horse racing
+show jumping
+dressage
+polo
+rodeo
+bull riding
+dog agility
+flyball
+sheepdog trials
+
+# craft and art
+painting
+oil painting
+watercolour
+gouache
+mural
+graffiti
+street art
+stencil art
+screen printing
+linocut
+etching
+ceramics
+pottery wheel
+raku firing
+glassblowing
+stained glass
+mosaic
+woodcarving
+furniture making
+joinery
+dovetail joints
+wood turning
+marquetry
+upholstery
+gilding
+bookbinding
+letterpress
+calligraphy
+typography
+graphic design
+logo design
+architecture
+model making
+diorama
+miniatures
+dollhouse
+terrain building
+cosplay
+prop making
+foam armour
+3d sculpting
+cgi
+animation
+stop motion
+claymation
+puppetry
+mask making
+jewellery making
+silversmithing
+lapidary
+enamelling
+blacksmithing
+bladesmithing
+sword making
+armour smithing
+leatherwork
+shoemaking
+tailoring
+dressmaking
+knitting
+crochet
+embroidery
+quilting
+weaving
+spinning yarn
+natural dyeing
+batik
+tie dye
+hat making
+wig making
+
+# music and performance
+orchestra
+choir
+marching band
+brass band
+drumline
+pipe band
+gamelan
+taiko drumming
+samba school
+steel drum
+bagpipes
+fiddle
+banjo
+mandolin
+ukulele
+concert harp
+cello
+double bass
+saxophone
+trumpet
+trombone
+tuba
+clarinet
+oboe
+flute
+harmonica
+accordion
+pipe organ
+harpsichord
+synthesizer
+modular synth
+drum machine
+beatboxing
+throat singing
+overtone singing
+yodel
+opera
+musical theatre
+ballet
+contemporary dance
+tap dance
+flamenco
+tango
+salsa
+bachata
+samba dancing
+capoeira
+breakdancing
+popping
+locking
+krump
+vogue dancing
+street dance
+kathak
+bharatanatyam
+kabuki
+lion dance
+dragon dance
+morris dancing
+maypole dancing
+circus
+acrobatics
+trapeze
+contortion
+juggling
+unicycling
+stilt walking
+fire dancing
+poi spinning
+hula hoop
+
+# places and travel
+tokyo
+kyoto
+osaka
+seoul
+busan
+shanghai
+beijing
+chengdu
+hong kong
+taipei
+bangkok
+hanoi
+saigon
+kuala lumpur
+singapore
+jakarta
+bali
+manila
+delhi
+mumbai
+jaipur
+kolkata
+dubai
+doha
+istanbul
+cairo
+marrakesh
+nairobi
+cape town
+lagos
+accra
+lisbon
+porto
+madrid
+barcelona
+seville
+rome
+florence
+venice
+naples
+athens
+santorini
+paris
+lyon
+marseille
+berlin
+munich
+hamburg
+vienna
+prague
+budapest
+krakow
+warsaw
+riga
+tallinn
+helsinki
+stockholm
+oslo
+copenhagen
+amsterdam
+brussels
+dublin
+edinburgh
+london
+manchester
+liverpool
+reykjavik
+new york
+chicago
+toronto
+montreal
+vancouver
+seattle
+portland
+san francisco
+los angeles
+san diego
+las vegas
+phoenix
+denver
+austin
+nashville
+new orleans
+miami
+boston
+mexico city
+havana
+bogota
+lima
+santiago
+buenos aires
+rio de janeiro
+sao paulo
+salvador
+recife
+sydney
+melbourne
+brisbane
+perth
+adelaide
+hobart
+darwin
+auckland
+wellington
+christchurch
+fiji
+tahiti
+hawaii
+alaska
+iceland
+greenland
+patagonia
+sahara
+gobi desert
+siberia
+himalayas
+andes
+alps
+rockies
+outback
+bush camping
+steppe
+tundra
+
+# transport
+tram
+trolleybus
+monorail
+maglev
+bullet train
+freight train
+steam locomotive
+cable car
+funicular
+gondola lift
+escalator
+cruise ship
+container terminal
+fishing trawler
+oil rig
+wind turbine
+solar farm
+dam
+canal lock
+shipyard
+dry dock
+airport
+runway
+control tower
+air traffic control
+helicopter
+seaplane
+hot air balloon
+airship
+parachute
+wingsuit flying
+
+# industry and engineering
+welding
+lathe work
+milling machine
+metal casting
+forging
+injection moulding
+assembly line
+factory tour
+mining
+drilling
+refinery
+pipeline
+quarry
+logging
+sawmill
+paper mill
+brickworks
+glassworks
+steel mill
+shipbreaking
+recycling plant
+landfill
+incinerator
+water treatment
+desalination
+power station
+nuclear plant
+electrical substation
+transmission line
+crane operation
+demolition
+tunnelling
+bridge building
+road building
+earthmoving
+dredging
+
+# games and collecting
+retro gaming
+arcade games
+board games
+tabletop gaming
+dungeons and dragons
+warhammer painting
+trading cards
+esports
+vr chat
+minecraft builds
+factory building games
+rocket building games
+racing simulator
+flight simulator
+handheld consoles
+game collecting
+
+# fashion and grooming
+streetwear
+sneakers
+denim
+leather jackets
+wristwatches
+horology
+piercings
+tattoo
+tattoo removal
+makeup
+special effects makeup
+hair colouring
+barbering
+nail art
+eyelashes
+skincare
+perfume
+thrifting
+vintage clothing
+fashion history
+
+# home and garden
+gardening
+allotment
+greenhouse
+hydroponics
+terrarium
+aquaponics
+composting
+backyard chickens
+renovation
+plumbing
+electrical work
+tiling
+plastering
+roofing
+insulation
+tiny house
+van life
+off grid living
+solar panels
+rainwater harvesting
+wood stove
+sauna
+hot tub
+treehouse
+shed build
+workshop setup
+
+# oddities and endurance
+world records
+guinness records
+rube goldberg machine
+marble run
+domino run
+chain reaction
+kinetic sculpture
+vending machine
+arcade restoration
+clockwork
+automata
+escape room
+haunted house
+theme park
+roller coaster
+water slide
+zip line
+obstacle course
+survival skills
+bushcraft
+foraging
+wild camping
+geocaching
+urban exploration
+abandoned places
+ghost town
+derelict building

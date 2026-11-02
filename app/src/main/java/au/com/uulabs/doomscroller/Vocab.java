@@ -1,93 +1,127 @@
 package au.com.uulabs.doomscroller;
 
+import android.content.res.AssetManager;
+
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+
 /**
- * The languages the feed may draw from, and the words each one contributes as
- * random subjects.
+ * The subjects the feed may draw from.
  *
- * A language setting does two jobs: it decides which vocabulary a subject is
- * drawn from, and it gives the sampler a way to reject an item whose title is
- * plainly in a language the user did not ask for.
+ * The words live in asset files, one subject per line, so the vocabulary can
+ * grow without touching code. They are vocabulary, not content: a subject
+ * decides only what gets *asked for*, never what comes back, and nothing here
+ * lists videos, channels or creators.
  *
- * The word lists are vocabulary, not content. They are not a list of videos,
- * channels or creators - they never limit what can appear, they only decide
- * what we search for.
+ * A draw takes a word from the whole pool of the enabled languages, so a
+ * language with a longer list contributes proportionally more.
  */
 public final class Vocab {
 
     public static final class Lang {
         public final String code;
         public final String name;
-        public final String[] words;
 
-        Lang(String code, String name, String... words) {
+        Lang(String code, String name) {
             this.code = code;
             this.name = name;
-            this.words = words;
         }
     }
 
     public static final Lang[] ALL = {
-        new Lang("en", "English",
-            "cake", "skateboard", "sunset", "haircut", "thunderstorm", "fishing",
-            "breakfast", "roadtrip", "sneakers", "origami", "camping", "boxing",
-            "lantern", "pancakes", "surfing", "goat", "marathon", "puppy",
-            "beekeeping", "trombone", "espresso", "bonsai", "tattoo", "submarine",
-            "fireworks", "accordion", "glacier", "wrestling", "bakery", "moped",
-            "aquarium", "snowboard", "violin", "harbour", "avalanche", "pottery",
-            "hanggliding", "mushroom", "clockwork", "desert", "kayak", "pigeon",
-            "trampoline", "lighthouse", "samurai", "cheesemaking", "windmill",
-            "puppetry", "skydiving", "cactus", "fjord", "blacksmith", "marble",
-            "hummingbird", "birdwatching", "whistling", "knitting", "iceberg",
-            "steam train", "carnival", "tugboat", "yodel", "hedgehog", "falconry",
-            "neon sign", "clockmaker", "cathedral", "salt flat", "jellyfish"),
-        new Lang("ja", "Japanese",
-            "ラーメン", "花火", "釣り", "猫", "旅行", "料理", "電車", "富士山",
-            "相撲", "カラオケ", "雪", "桜", "ゲーム", "犬", "祭り", "寿司"),
-        new Lang("zh", "Chinese",
-            "火锅", "熊猫", "高铁", "广场舞", "长城", "包子", "太极", "象棋",
-            "风筝", "庙会", "早市", "书法", "麻将", "饺子"),
-        new Lang("ko", "Korean",
-            "김치", "축구", "한복", "불꽃", "등산", "라면", "고양이", "태권도",
-            "노래방", "바다", "떡볶이"),
-        new Lang("es", "Spanish",
-            "paella", "fútbol", "flamenco", "playa", "tacos", "baile", "mercado",
-            "guitarra", "tormenta", "bicicleta"),
-        new Lang("pt", "Portuguese",
-            "futebol", "samba", "praia", "churrasco", "carnaval", "café",
-            "capoeira", "chuva", "mercado"),
-        new Lang("fr", "French",
-            "fromage", "vélo", "marché", "cuisine", "montagne", "rugby",
-            "boulangerie", "plage", "orage"),
-        new Lang("de", "German",
-            "wandern", "brezel", "fussball", "kuchen", "berg", "schnee",
-            "fahrrad", "markt"),
-        new Lang("it", "Italian",
-            "pizza", "vespa", "mare", "calcio", "cucina", "montagna", "gelato",
-            "temporale"),
-        new Lang("ru", "Russian",
-            "балет", "хоккей", "зима", "медведь", "поезд", "снег", "рыбалка"),
-        new Lang("ar", "Arabic",
-            "قهوة", "صحراء", "خيل", "مطر", "سوق", "بحر", "مخبز"),
-        new Lang("hi", "Hindi",
-            "क्रिकेट", "चाय", "नृत्य", "बारिश", "पहाड़", "खाना", "बाज़ार"),
-        new Lang("id", "Indonesian",
-            "pantai", "sepakbola", "nasi", "gunung", "hujan", "pasar"),
-        new Lang("tr", "Turkish",
-            "kahve", "futbol", "deniz", "kebap", "kar", "pazar"),
-        new Lang("th", "Thai",
-            "ทะเล", "ก๋วยเตี๋ยว", "ฝน", "ตลาด", "ภูเขา", "หมา"),
+        new Lang("en", "English"),
+        new Lang("ja", "Japanese"),
+        new Lang("zh", "Chinese"),
+        new Lang("ko", "Korean"),
+        new Lang("es", "Spanish"),
+        new Lang("pt", "Portuguese"),
+        new Lang("fr", "French"),
+        new Lang("de", "German"),
+        new Lang("it", "Italian"),
+        new Lang("ru", "Russian"),
+        new Lang("ar", "Arabic"),
+        new Lang("hi", "Hindi"),
+        new Lang("id", "Indonesian"),
+        new Lang("tr", "Turkish"),
+        new Lang("th", "Thai"),
     };
+
+    private static final Map<String, List<String>> WORDS =
+            new HashMap<String, List<String>>();
+    private static boolean loaded;
 
     private Vocab() {
     }
 
+    /** Reads every subject file once. Safe to call more than once. */
+    public static synchronized void load(AssetManager assets) {
+        if (loaded) {
+            return;
+        }
+        loaded = true;
+        for (Lang lang : ALL) {
+            WORDS.put(lang.code, read(assets, lang.code));
+        }
+    }
+
+    private static List<String> read(AssetManager assets, String code) {
+        List<String> words = new ArrayList<String>();
+        BufferedReader reader = null;
+        try {
+            reader = new BufferedReader(new InputStreamReader(
+                    assets.open("subjects/" + code + ".txt"), "UTF-8"));
+            String line;
+            while ((line = reader.readLine()) != null) {
+                line = line.trim();
+                if (!line.isEmpty() && !line.startsWith("#")) {
+                    words.add(line);
+                }
+            }
+        } catch (Exception ignored) {
+            // A missing file simply contributes no subjects.
+        } finally {
+            if (reader != null) {
+                try {
+                    reader.close();
+                } catch (Exception ignored) {
+                }
+            }
+        }
+        return words;
+    }
+
     public static Lang byCode(String code) {
-        for (Lang l : ALL) {
-            if (l.code.equals(code)) {
-                return l;
+        for (Lang lang : ALL) {
+            if (lang.code.equals(code)) {
+                return lang;
             }
         }
         return null;
+    }
+
+    /** Every subject of every enabled language, as one pool. */
+    public static List<String> pool(Set<String> enabled) {
+        List<String> words = new ArrayList<String>();
+        for (Lang lang : ALL) {
+            if (enabled.contains(lang.code)) {
+                List<String> held = WORDS.get(lang.code);
+                if (held != null) {
+                    words.addAll(held);
+                }
+            }
+        }
+        return words;
+    }
+
+    /** How many subjects this language carries, for documentation and tests. */
+    public static int count(String code) {
+        List<String> held = WORDS.get(code);
+        return held == null ? 0 : held.size();
     }
 
     /** Latin-script stops, enough to separate the common European languages. */

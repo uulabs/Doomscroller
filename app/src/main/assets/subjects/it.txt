@@ -1,0 +1,52 @@
+# UU Doomscroller subjects (Italian)
+pizza
+vespa
+mare
+calcio
+cucina
+montagna
+gelato
+temporale
+castello
+cattedrale
+foresta
+neve
+pasta
+tiramisù
+cappuccino
+espresso
+mercato
+duomo
+colosseo
+venezia
+canal grande
+gondola
+toscana
+sicilia
+sardegna
+dolomiti
+lago di como
+limone
+oliveto
+vigneto
+vino
+prosciutto
+parmigiano
+gelateria
+pizzaiolo
+opera lirica
+mandolino
+tarantella
+carnevale di venezia
+palio
+barca a vela
+nuoto
+ciclismo
+sci
+alpinismo
+arrampicata
+pesca
+apicoltura
+ceramica
+vetro di murano
+maschere

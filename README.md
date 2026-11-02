@@ -29,29 +29,32 @@ video feed assembled from several public sources.
 
 There is one fixed input, and it is a list of words.
 
-On each draw the app picks one of the languages you enabled, then one word from
-that language at random, and searches each source for it. A word cannot come
-round again until twelve others have been used, which is what stops the feed
-collapsing into one subject.
+On each draw the app takes the next subject from a shuffled bag holding every
+word of every language you enabled, and searches each source for it. The bag is
+spent completely before it is refilled, and it is saved, so nothing comes round
+again until everything else has been used - including across restarts.
 
-The words are ordinary nouns and activities — `cake`, `bonsai`, `lighthouse`,
-`yodel` — held in [`Vocab.java`](app/src/main/java/au/com/uulabs/doomscroller/Vocab.java):
+The words are ordinary nouns and activities, held one per line in
+[`assets/subjects/`](app/src/main/assets/subjects/) - `en.txt`, `ja.txt` and so
+on. Adding subjects means editing a text file, not touching code.
 
-| Language | Words | | Language | Words |
+| Language | Subjects | | Language | Subjects |
 | --- | --- | --- | --- | --- |
-| English | 69 | | Russian | 7 |
-| Japanese | 16 | | Arabic | 7 |
-| Chinese | 14 | | Hindi | 7 |
-| Korean | 11 | | Indonesian | 6 |
-| Spanish | 10 | | Turkish | 6 |
-| Portuguese | 9 | | Thai | 6 |
-| French | 9 | | | |
-| German | 8 | | | |
-| Italian | 8 | | | |
+| English | 851 | | Italian | 51 |
+| Japanese | 131 | | Russian | 44 |
+| Chinese | 121 | | Arabic | 28 |
+| Korean | 54 | | Hindi | 32 |
+| Spanish | 68 | | Indonesian | 30 |
+| Portuguese | 58 | | Turkish | 30 |
+| French | 63 | | Thai | 24 |
+| German | 60 | | | |
 
-193 words in total. Nothing else is curated: no list of videos, channels or
-creators, and the word decides only what gets *asked for*, never what comes
-back. The results themselves are whatever the platform returns at that moment.
+1645 subjects in total, covering motorsport and cars, computing and security,
+space, earth science, animals, food, every mainstream sport, craft, music,
+places, transport, industry, gaming, fashion, home and the deliberately odd.
+Nothing else is curated: no list of videos, channels or creators. The word
+decides only what gets *asked for*, never what comes back. The results are
+whatever the platform returns at that moment.
 
 ## Sources
 
