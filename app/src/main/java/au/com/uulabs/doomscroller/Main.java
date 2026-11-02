@@ -93,7 +93,13 @@ public class Main extends Activity {
     private Slot pending;
     private Sources.Item current;
     private String lastSource;
-    private boolean filling;
+    private volatile boolean filling;
+    private volatile boolean destroyed;
+    private TopicSampler topicSampler;
+    private final ArrayDeque<Ready> forward = new ArrayDeque<Ready>();
+    private TextView controlsSource;
+    private TextView rotateButton;
+    private boolean manualRotation;
     private boolean paused;
     private boolean wantNext;
     /** True while the opening notice is up: nothing may play behind it. */
@@ -117,6 +123,7 @@ public class Main extends Activity {
         final String url;
         final boolean page;
         final boolean landscape;
+        int navigation;
 
         Ready(Sources.Item item, String url, boolean page, boolean landscape) {
             this.item = item;
@@ -128,11 +135,13 @@ public class Main extends Activity {
 
     private static final class Slot {
         String url;
+        int navigation;
         long shownAt;
         boolean rendered;
         boolean sizeKnown;     // the decoded stream has reported its geometry
         float displayRatio;    // width * pixel ratio / height
         boolean rejected;      // refused admission, so never history
+        boolean watcherStarted;
         ExoPlayer player;      // null for page slots
         PlayerView view;       // null for page slots
         WebView web;           // set for page slots
@@ -200,6 +209,10 @@ public class Main extends Activity {
 
     private void buildUi() {
         Vocab.load(getAssets());
+        topicSampler = new TopicSampler(Vocab.topics(getAssets()), rand, new TopicSampler.State() {
+            public String get(String key) { return Prefs.wordBag(Main.this, key); }
+            public void put(String key, String value) { Prefs.setWordBag(Main.this, key, value); }
+        });
         applyOrientation();
         Sources.setAllowLandscape(Prefs.landscapeAllowed(this));
         ytResolver = new YoutubeResolver(this);
@@ -234,6 +247,19 @@ public class Main extends Activity {
             }
         });
         root.addView(shareButton, cornerParams(Gravity.TOP | Gravity.LEFT));
+        rotateButton = glyph("↻");
+        rotateButton.setContentDescription("Rotate video");
+        FrameLayout.LayoutParams rotateParams = cornerParams(Gravity.TOP | Gravity.RIGHT);
+        rotateParams.rightMargin = dp(14);
+        root.addView(rotateButton, rotateParams);
+        rotateButton.setVisibility(View.GONE);
+        rotateButton.setOnClickListener(v -> {
+            manualRotation = !manualRotation;
+            setRequestedOrientation(manualRotation
+                    ? android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+                    : android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
+            updateRotateControl();
+        });
 
         LinearLayout loading = new LinearLayout(this);
         loading.setOrientation(LinearLayout.VERTICAL);
@@ -280,6 +306,11 @@ public class Main extends Activity {
         controlsTime.setTextColor(Color.parseColor("#BBBBBB"));
         controlsTime.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f);
         barTop.addView(controlsTime);
+        controlsSource = new TextView(this);
+        controlsSource.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f);
+        controlsSource.setTextColor(0xFFBBBBBB);
+        controlsSource.setGravity(Gravity.RIGHT | Gravity.CENTER_VERTICAL);
+        barTop.addView(controlsSource, new LinearLayout.LayoutParams(0, -2, 1f));
         controlsBar.addView(barTop);
 
         controlsSeek = new android.widget.SeekBar(this);
@@ -521,7 +552,7 @@ public class Main extends Activity {
                 if (active != null && active.web != null) {
                     active.web.evaluateJavascript(JS_ACTIVE, null);
                 }
-                if (active != null && active.player != null && !paused) {
+                if (active != null && active.player != null && !paused && portraitVerified(active) && !active.rejected) {
                     active.player.play();
                 }
             }
@@ -548,6 +579,7 @@ public class Main extends Activity {
 
             @Override
             public void run() {
+                if (destroyed) return;
                 if (loadingView != null) {
                     boolean blank = screenIsBlank();
                     long now = System.currentTimeMillis();
@@ -653,6 +685,11 @@ public class Main extends Activity {
      * the right edge, so that corner is the one place nothing overlaps.
      */
     private void placeButtons(int topInset) {
+        if (rotateButton != null) {
+            FrameLayout.LayoutParams p = (FrameLayout.LayoutParams) rotateButton.getLayoutParams();
+            p.topMargin = topInset + dp(12);
+            rotateButton.setLayoutParams(p);
+        }
         if (settingsButton != null) {
             FrameLayout.LayoutParams p = cornerParams(Gravity.TOP | Gravity.LEFT);
             p.topMargin = topInset + dp(12);
@@ -679,6 +716,14 @@ public class Main extends Activity {
                     bottom = insets.getSystemWindowInsetBottom();
                     top = insets.getSystemWindowInsetTop();
                 }
+                if (rotateButton != null) {
+                    int right = Build.VERSION.SDK_INT >= 30
+                            ? insets.getInsets(WindowInsets.Type.systemBars() | WindowInsets.Type.displayCutout()).right
+                            : insets.getSystemWindowInsetRight();
+                    FrameLayout.LayoutParams rp = (FrameLayout.LayoutParams) rotateButton.getLayoutParams();
+                    rp.rightMargin = dp(14) + right;
+                    rotateButton.setLayoutParams(rp);
+                }
                 placeButtons(top);
                 return insets;
             }
@@ -697,16 +742,16 @@ public class Main extends Activity {
     }
 
     private void fill() {
-        if (filling) {
+        if (destroyed || filling) {
             return;
         }
         filling = true;
-        io.execute(new Runnable() {
+        try { io.execute(new Runnable() {
             @Override
             public void run() {
                 try {
                     int attempts = 0;
-                    while (true) {
+                    while (!destroyed) {
                         synchronized (ready) {
                             if (ready.size() >= PREFETCH) {
                                 break;
@@ -716,6 +761,7 @@ public class Main extends Activity {
                             break;   // give up for now rather than spin forever
                         }
                         Ready r = produce();
+                        if (destroyed) return;
                         if (r == null) {
                             continue;   // this subject was refused; try another
                         }
@@ -739,7 +785,10 @@ public class Main extends Activity {
                     }
                 });
             }
-        });
+        }); } catch (java.util.concurrent.RejectedExecutionException stopped) {
+            filling = false;
+            if (!destroyed) throw stopped;
+        }
     }
 
     /** Debug only: a known 1280x720 stream, whatever the sources say. */
@@ -983,13 +1032,21 @@ public class Main extends Activity {
                     + "if(buffering&&stalled>20000)return 'END';"
                     + "return '';}catch(e){return '';}})()";
 
+    private boolean ownsPage(WebView view) {
+        if (destroyed) return false;
+        return (active != null && active.web == view && !active.rejected)
+                || (pending != null && pending.web == view && !pending.rejected);
+    }
+
     private void watchForUnavailable(final WebView view, final int attempt) {
+        if (!ownsPage(view)) return;
         if (attempt > 600) {
             return;
         }
         view.evaluateJavascript(WATCH_JS, new ValueCallback<String>() {
             @Override
             public void onReceiveValue(String value) {
+                if (!ownsPage(view)) return;
                 boolean gone = value != null && value.contains("GONE");
                 boolean ended = value != null && value.contains("END");
                 // A player whose playhead cannot be seen gets a bounded grace
@@ -1000,10 +1057,18 @@ public class Main extends Activity {
                 final boolean isActive = active != null && active.web == view;
                 final Slot watched = isActive ? active
                         : (pending != null && pending.web == view ? pending : null);
-                if (watched != null && !Prefs.landscapeAllowed(Main.this)) {
+                // A prefetched page is intentionally paused: END can mean only
+                // that its playhead has not moved. Reject unavailable/missing
+                // streams here, not a healthy paused prefetch.
+                if ((gone || (blind && next >= 8)) && watched == pending) {
+                    rejectSlot(watched);
+                    return;
+                }
+                if (watched != null) {
                     view.evaluateJavascript(PAGE_SIZE_JS, new ValueCallback<String>() {
                         @Override
                         public void onReceiveValue(String size) {
+                            if (watched != active && watched != pending) return;
                             String clean = size == null ? "?" : size.replace("\"", "");
                             int bar = clean.indexOf('x');
                             if (bar <= 0) {
@@ -1022,8 +1087,9 @@ public class Main extends Activity {
                             }
                             watched.sizeKnown = true;
                             watched.displayRatio = (float) w / (float) h;
+                            updateRotateControl();
                             igTrace("page size " + w + "x" + h + " src=" + watched.item.source);
-                            if (watched.displayRatio > 1.0f) {
+                            if (watched.displayRatio > 1.0f && !Prefs.landscapeAllowed(Main.this)) {
                                 if (watched == pending) {
                                     rejectSlot(watched);
                                 } else {
@@ -1196,44 +1262,9 @@ public class Main extends Activity {
      * word again either.
      */
     private String pickWord() {
-        Set<String> langs = Prefs.languages(this);
-        List<String> pool = Vocab.pool(langs);
-        if (pool.isEmpty()) {
-            Set<String> fallback = new LinkedHashSet<String>();
-            fallback.add("en");
-            pool = Vocab.pool(fallback);
-        }
-        if (pool.isEmpty()) {
-            return "cake";
-        }
-        Set<String> allowed = new HashSet<String>(pool);
-
-        List<String> bag = new ArrayList<String>();
-        String stored = Prefs.wordBag(this, "all");
-        if (stored != null && !stored.isEmpty()) {
-            for (String w : stored.split("\n")) {
-                // Drop anything belonging to a language since switched off.
-                if (!w.isEmpty() && allowed.contains(w)) {
-                    bag.add(w);
-                }
-            }
-        }
-        if (bag.isEmpty()) {
-            bag.addAll(pool);
-            Collections.shuffle(bag, rand);
-        }
-
-        String word = bag.remove(bag.size() - 1);
-        StringBuilder remaining = new StringBuilder();
-        for (String w : bag) {
-            if (remaining.length() > 0) {
-                remaining.append('\n');
-            }
-            remaining.append(w);
-        }
-        Prefs.setWordBag(this, "all", remaining.toString());
-        traceWord(word);
-        return word;
+        TopicSampler.Topic topic = topicSampler.next(Prefs.languages(this));
+        traceWord(topic.query);
+        return topic.query;
     }
 
     /** Records each subject drawn, so variety can be measured rather than felt. */
@@ -1292,6 +1323,7 @@ public class Main extends Activity {
     }
 
     private void pump() {
+        if (destroyed) return;
         if (pending != null) {
             return;
         }
@@ -1305,6 +1337,7 @@ public class Main extends Activity {
         }
         Slot slot = new Slot();
         slot.item = r.item;
+        slot.navigation = r.navigation;
         slot.url = r.url;
         if (r.page) {
             WebView w = new WebView(this);
@@ -1331,6 +1364,8 @@ public class Main extends Activity {
 
                 @Override
                 public void onPageFinished(final WebView view, String url) {
+                    if (!ownsPage(view) || slot.watcherStarted) return;
+                    slot.watcherStarted = true;
                     watchForUnavailable(view, 0);
                     if (url != null && url.contains("instagram.com")) {
                         view.evaluateJavascript(INSTAGRAM_STYLE_JS, null);
@@ -1381,13 +1416,16 @@ public class Main extends Activity {
                     }
                 }
             });
-            w.loadUrl(r.url);
             slot.web = w;
             slot.url = r.url;
             slot.rootView = w;
             slot.rootView.setVisibility(View.GONE);
             stage.addView(slot.rootView, match());
             pending = slot;
+            w.loadUrl(r.url);
+            handler.postDelayed(() -> {
+                if (pending == slot && !portraitVerified(slot)) rejectSlot(slot);
+            }, 25000);
             fill();
             if ((active == null || wantNext) && (portraitVerified(slot)
                     || Prefs.landscapeAllowed(Main.this))) {
@@ -1430,7 +1468,9 @@ public class Main extends Activity {
                 .build();
         slot.player.setRepeatMode(Player.REPEAT_MODE_OFF);
         slot.player.setVolume(0f);
-        slot.view = new PlayerView(this);
+        // Prefetch must compose beneath the active view. A separate SurfaceView
+        // showed the pending clip's paused first frame over the active video on S98.
+        slot.view = (PlayerView) getLayoutInflater().inflate(R.layout.video_player, stage, false);
         slot.view.setUseController(false);
         // FIT always: cropping to fill hides part of the picture and made a
         // landscape clip look like a portrait one that had been zoomed.
@@ -1438,6 +1478,9 @@ public class Main extends Activity {
         slot.view.setPlayer(slot.player);
         slot.rootView = slot.view;
         slot.rootView.setVisibility(View.VISIBLE);
+        // Keep a decoding surface without exposing unverified prefetch frames.
+        // slideIn restores alpha only after this slot is admitted.
+        slot.rootView.setAlpha(0f);
         stage.addView(slot.rootView, 0, match());
         slot.player.addListener(new Player.Listener() {
 
@@ -1453,6 +1496,7 @@ public class Main extends Activity {
                 }
                 created.sizeKnown = known;
                 created.displayRatio = ratio;
+                updateRotateControl();
                 igTrace("size " + size.width + "x" + size.height
                         + " ratio=" + ratio + " src=" + created.item.source);
                 if (!Prefs.landscapeAllowed(Main.this) && known && ratio > 1.0f) {
@@ -1505,15 +1549,7 @@ public class Main extends Activity {
                         + " " + (e.getCause() == null ? "" : e.getCause()));
                 setStatus("skipped: " + e.getErrorCodeName());
                 if (pending == created) {
-                    pending = null;
-                    created.player.release();
-                    stage.removeView(created.rootView);
-                    handler.post(new Runnable() {
-                        @Override
-                        public void run() {
-                            pump();
-                        }
-                    });
+                    rejectSlot(created);
                 } else if (active == created) {
                     next();
                 }
@@ -1521,13 +1557,14 @@ public class Main extends Activity {
         });
         slot.player.setMediaItem(MediaItem.fromUri(r.url));
         igTrace("prepare " + r.item.source + " url=" + r.url.substring(0, Math.min(80, r.url.length())));
-        slot.player.prepare();
         pending = slot;
+        slot.player.prepare();
         handler.postDelayed(new Runnable() {
             @Override
             public void run() {
                 if (pending == created
-                        && created.player.getPlaybackState() != Player.STATE_READY) {
+                        && (created.player.getPlaybackState() != Player.STATE_READY
+                            || !portraitVerified(created))) {
                     setStatus("skipped: not ready");
                     pending = null;
                     created.player.release();
@@ -1668,7 +1705,7 @@ public class Main extends Activity {
         if (Prefs.landscapeAllowed(this)) {
             return true;
         }
-        return slot.sizeKnown && slot.displayRatio <= 1.0f;
+        return !slot.rejected && slot.sizeKnown && slot.displayRatio > 0f && slot.displayRatio <= 1.0f;
     }
 
     /** Promotes a verified clip only when the feed is actually waiting for one. */
@@ -1703,11 +1740,26 @@ public class Main extends Activity {
     }
 
     private void rejectSlot(Slot slot) {
-        if (slot == null) {
+        if (slot == null || slot.rejected) {
             return;
         }
+        slot.rejected = true;
         if (slot == pending) {
             pending = null;
+            if (slot.navigation < 0) {
+                // A disallowed/unavailable historical clip must not turn a
+                // backward swipe into forward replay or fresh discovery.
+                Ready older = history.pollFirst();
+                if (older != null) {
+                    older.navigation = -1;
+                    synchronized (ready) { ready.addFirst(older); }
+                    wantNext = true;
+                    swapDirection = -1f;
+                } else {
+                    wantNext = false;
+                    swapDirection = 1f;
+                }
+            }
         }
         if (slot.player != null) {
             try {
@@ -1723,7 +1775,6 @@ public class Main extends Activity {
         if (slot.rootView != null && slot.rootView.getParent() == stage) {
             stage.removeView(slot.rootView);
         }
-        wantNext = true;
         handler.post(new Runnable() {
             @Override
             public void run() {
@@ -1733,6 +1784,11 @@ public class Main extends Activity {
     }
 
     private void next() {
+        if (destroyed) return;
+        if (!forward.isEmpty() && (pending == null || pending.navigation == 0)) {
+            prepareHistory(forward.pollFirst(), 1);
+            return;
+        }
         if (pending == null) {
             if (active != null) {
                 // Nothing is buffered yet, so the clip leaves the screen and the
@@ -1750,7 +1806,8 @@ public class Main extends Activity {
             return;
         }
         if (!portraitVerified(pending) && !Prefs.landscapeAllowed(this)) {
-            // Not admitted yet: keep it hidden and silent, wait for a measurement.
+            // Keep waiting for geometry, but visibly acknowledge the swipe.
+            nudge(-swapDirection);
             wantNext = true;
             return;
         }
@@ -1759,6 +1816,7 @@ public class Main extends Activity {
         active = pending;
         pending = null;
         current = active.item;
+        updateRotateControl();
         remember(current.toString());
         if (BuildConfig.DEBUG) try {
             java.io.FileOutputStream f = new java.io.FileOutputStream(
@@ -1769,9 +1827,11 @@ public class Main extends Activity {
         }
         if (old != null) {
             if (!old.rejected) {
-                history.push(new Ready(old.item, old.url, old.web != null, false));
+                ArrayDeque<Ready> destination = active.navigation < 0 ? forward : history;
+                destination.push(new Ready(old.item, old.url, old.web != null, false));
+                if (destination.size() > 100) destination.removeLast();
             }
-            if (history.size() > 20) {
+            if (history.size() > 100) {
                 history.removeLast();
             }
             // Audio stops at once, but the surface stays alive long enough to
@@ -1845,31 +1905,30 @@ public class Main extends Activity {
     }
 
     private void previous() {
-        Ready back;
-        synchronized (history) {
-            back = history.pollFirst();
-        }
-        if (back == null) {
+        if (destroyed) return;
+        if (pending != null && pending.navigation != 0) {
+            nudge(1f);
             return;
         }
-        // The stored entry already carries its stream, so going back costs
-        // nothing: the discarded slot is dropped and the previous one is
-        // prepared and swapped in exactly like a forward move.
+        Ready back = history.pollFirst();
+        if (back == null) { nudge(1f); return; }
+        prepareHistory(back, -1);
+    }
+
+    private void prepareHistory(Ready entry, int direction) {
         if (pending != null) {
-            // A page slot holds a WebView, not a player.
-            if (pending.player != null) {
-                pending.player.release();
-            }
-            if (pending.web != null) {
-                silenceAndDestroy(pending.web);
-            }
+            // Preserve the unused discovery clip while retracing history.
+            Ready parked = new Ready(pending.item, pending.url, pending.web != null, false);
+            synchronized (ready) { ready.addFirst(parked); }
+            if (pending.player != null) pending.player.release();
+            if (pending.web != null) silenceAndDestroy(pending.web);
             stage.removeView(pending.rootView);
             pending = null;
         }
-        synchronized (ready) {
-            ready.addFirst(back);
-        }
-        swapDirection = -1f;
+        entry.navigation = direction;
+        synchronized (ready) { ready.addFirst(entry); }
+        swapDirection = direction;
+        nudge(-direction);
         wantNext = true;
         pump();
     }
@@ -1920,6 +1979,7 @@ public class Main extends Activity {
         }
         handler.removeCallbacks(controlsTick);
         handler.postDelayed(controlsTick, 500);
+        controlsSource.setText(active == null ? "" : active.item.source);
         boolean playable = active != null && active.player != null;
         controlsToggle.setAlpha(playable ? 1f : 0.35f);
         if (!playable) {
@@ -2093,6 +2153,21 @@ public class Main extends Activity {
      * turns by itself, and with auto-rotate off Android offers its rotate
      * button when the phone is tilted. Nothing here overrides the user.
      */
+    private void updateRotateControl() {
+        if (rotateButton == null) return;
+        boolean upright = getResources().getConfiguration().orientation
+                != android.content.res.Configuration.ORIENTATION_LANDSCAPE;
+        boolean wide = active != null && active.sizeKnown && active.displayRatio > 1f;
+        rotateButton.setVisibility(Prefs.landscapeAllowed(this)
+                && (manualRotation || (upright && wide)) ? View.VISIBLE : View.GONE);
+    }
+
+    @Override public void onConfigurationChanged(android.content.res.Configuration configuration) {
+        super.onConfigurationChanged(configuration);
+        root.requestApplyInsets();
+        updateRotateControl();
+    }
+
     private void applyOrientation() {
         int wanted = Prefs.landscapeAllowed(this)
                 ? android.content.pm.ActivityInfo.SCREEN_ORIENTATION_USER
@@ -2106,7 +2181,9 @@ public class Main extends Activity {
         if (settingsPanel != null) {
             root.removeView(settingsPanel);
             settingsPanel = null;
+            manualRotation = false;
             applyOrientation();
+            updateRotateControl();
             Sources.setAllowLandscape(Prefs.landscapeAllowed(this));
             igTrace("settings close: landscape=" + Prefs.landscapeAllowed(this)
                     + " active=" + (active != null)
@@ -2116,7 +2193,7 @@ public class Main extends Activity {
             if (active != null && !portraitVerified(active)) {
                 disposeActiveAndAdvance(active);
             }
-            if (active != null && active.player != null && !paused) {
+            if (active != null && active.player != null && !paused && portraitVerified(active) && !active.rejected) {
                 active.player.play();
             }
             return;
@@ -2174,7 +2251,13 @@ public class Main extends Activity {
     @Override
     protected void onDestroy() {
         super.onDestroy();
+        destroyed = true;
+        handler.removeCallbacks(hideControls);
+        handler.removeCallbacks(controlsTick);
+        // Keep delayed retiring-player releases alive; pump/fill/watch stop via destroyed.
         io.shutdownNow();
+        if (active != null && active.web != null) silenceAndDestroy(active.web);
+        if (pending != null && pending.web != null) silenceAndDestroy(pending.web);
         if (active != null && active.player != null) {
             active.player.release();
         }

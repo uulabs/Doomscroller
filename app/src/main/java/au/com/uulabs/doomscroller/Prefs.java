@@ -47,13 +47,12 @@ public final class Prefs {
     }
 
     /**
-     * Everything is on out of the box except PeerTube, whose clips are long form
-     * and rarely portrait, so it would take more from the feed than it gives.
+     * X and PeerTube are opt-in on new installs. Existing choices are retained.
      */
     private static Set<String> defaultSources() {
         Set<String> out = new LinkedHashSet<String>();
         for (String source : Sources.ALL) {
-            if (!Sources.PEERTUBE.equals(source)) {
+            if (!Sources.PEERTUBE.equals(source) && !Sources.X.equals(source)) {
                 out.add(source);
             }
         }
@@ -101,14 +100,7 @@ public final class Prefs {
 
     public static Set<String> sources(Context c) {
         SharedPreferences prefs = sp(c);
-        // A changed default is applied once to existing installs too, so nobody
-        // is left on an old selection they never chose.
-        if (prefs.getInt(KEY_SOURCES_VERSION, 1) < SOURCES_VERSION) {
-            Set<String> defaults = defaultSources();
-            prefs.edit().putStringSet(KEY_SOURCES, defaults)
-                    .putInt(KEY_SOURCES_VERSION, SOURCES_VERSION).apply();
-            return defaults;
-        }
+        // Defaults apply only when no source selection has been saved.
         Set<String> s = prefs.getStringSet(KEY_SOURCES, null);
         if (s == null) {
             s = defaultSources();

@@ -18,8 +18,8 @@ import java.util.Set;
  * decides only what gets *asked for*, never what comes back, and nothing here
  * lists videos, channels or creators.
  *
- * A draw takes a word from the whole pool of the enabled languages, so a
- * language with a longer list contributes proportionally more.
+ * TopicSampler draws languages and families separately, so a larger vocabulary
+ * does not give one language more discovery attempts.
  */
 public final class Vocab {
 
@@ -118,6 +118,26 @@ public final class Vocab {
         return words;
     }
 
+    /** Bundled labelled concepts plus a small lane for the original local vocabulary. */
+    public static List<TopicSampler.Topic> topics(AssetManager assets) {
+        List<TopicSampler.Topic> out = new ArrayList<>();
+        for (Lang lang : ALL) {
+            try (BufferedReader r = new BufferedReader(new InputStreamReader(
+                    assets.open("topics/" + lang.code + ".tsv"), "UTF-8"))) {
+                String line;
+                while ((line=r.readLine()) != null) {
+                    if(line.startsWith("#"))continue;
+                    String[] p=line.split("\\t",3);
+                    if(p.length==3)out.add(new TopicSampler.Topic(lang.code,p[0],p[1],p[2]));
+                }
+            } catch (java.io.IOException e) { throw new IllegalStateException("Missing topics: "+lang.code,e); }
+            List<String> words=WORDS.get(lang.code);
+            if(words!=null)for(String word:words)out.add(new TopicSampler.Topic(
+                    lang.code,"local-discovery","local-"+lang.code+"-"+word,word));
+        }
+        return out;
+    }
+
     /** How many subjects this language carries, for documentation and tests. */
     public static int count(String code) {
         List<String> held = WORDS.get(code);
@@ -126,6 +146,7 @@ public final class Vocab {
 
     /** Latin-script stops, enough to separate the common European languages. */
     private static final String[][] LATIN_STOPS = {
+        {"en", "the and with this that from your are is"},
         {"es", "el la los las que del una por con para esto esta muy pero como"},
         {"pt", "não uma dos das que com para isso muito mas como quando"},
         {"fr", "les des une est dans pour avec mais très cette nous vous"},
@@ -137,8 +158,8 @@ public final class Vocab {
 
     /**
      * Best-effort language of a title. Script is decisive where it is
-     * unambiguous; for Latin text a small stop-word vote is used, defaulting to
-     * English. This is a filter, not a classifier - an item is only rejected
+     * unambiguous; for Latin text a small stop-word vote is used, leaving uncertain results
+     * unknown. This is a filter, not a classifier - an item is only rejected
      * when the answer is clear.
      */
     public static String detect(String text) {
@@ -173,7 +194,7 @@ public final class Vocab {
             return "ko";
         }
         if (han > latin) {
-            return "zh";
+            return null; // Han-only text may also be Japanese; do not guess.
         }
         if (arabic > latin) {
             return "ar";
@@ -190,9 +211,10 @@ public final class Vocab {
         if (latin == 0) {
             return null;
         }
-        String lower = text.toLowerCase();
+        String lower = text.toLowerCase(java.util.Locale.ROOT);
         String[] tokens = lower.split("[^\\p{L}]+");
-        String best = "en";
+        String best = null;
+        int runnerUp = 0;
         int bestScore = 0;
         for (String[] row : LATIN_STOPS) {
             String[] stops = row[1].split(" ");
@@ -205,10 +227,11 @@ public final class Vocab {
                 }
             }
             if (score > bestScore) {
+                runnerUp = bestScore;
                 bestScore = score;
                 best = row[0];
-            }
+            } else if (score > runnerUp) { runnerUp = score; }
         }
-        return best;
+        return bestScore >= 2 && bestScore > runnerUp ? best : null;
     }
 }
