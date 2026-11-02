@@ -266,6 +266,45 @@ final class SettingsUi {
         aboutCard.addView(check);
         column.addView(aboutCard);
 
+        // ---- about
+        column.addView(sectionLabel(context, "ABOUT", null));
+
+        LinearLayout aboutBody = card(context);
+        aboutBody.setOrientation(LinearLayout.VERTICAL);
+        int bodyPad = dp(context, 16);
+        aboutBody.setPadding(bodyPad, bodyPad, bodyPad, bodyPad);
+
+        TextView created = new TextView(context);
+        created.setText("Created by UU Labs");
+        created.setTextColor(TEXT);
+        created.setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f);
+        created.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
+        aboutBody.addView(created);
+
+        TextView experimental = new TextView(context);
+        experimental.setText("Experimental — just for a laugh. This exists to see what a "
+                + "feed with no algorithm at all would look like: no profile, no "
+                + "history, no ranking. It is a toy, not a product. There is no "
+                + "support, no roadmap and no promise it keeps working — every source "
+                + "it uses is an undocumented surface that the platform it belongs to "
+                + "can close whenever it likes.");
+        experimental.setTextColor(MUTED);
+        experimental.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13.5f);
+        experimental.setLineSpacing(dp(context, 3), 1f);
+        experimental.setPadding(0, dp(context, 10), 0, 0);
+        aboutBody.addView(experimental);
+
+        TextView noResponsibility = new TextView(context);
+        noResponsibility.setText("UU Labs takes no responsibility for material viewed "
+                + "using this application.");
+        noResponsibility.setTextColor(MUTED);
+        noResponsibility.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13.5f);
+        noResponsibility.setLineSpacing(dp(context, 3), 1f);
+        noResponsibility.setPadding(0, dp(context, 10), 0, 0);
+        aboutBody.addView(noResponsibility);
+
+        column.addView(aboutBody);
+
         // ---- done
         TextView done = new TextView(context);
         done.setText("Done");
