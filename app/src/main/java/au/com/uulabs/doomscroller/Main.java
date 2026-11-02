@@ -633,10 +633,11 @@ public class Main extends Activity {
                         blankSince = now;
                     }
                     if (active != null && active.web != null && !gateOpen
+                            && !blank && !active.rejected
                             && now - lastActivePing > 1200) {
                         lastActivePing = now;
+                        igTrace("keepalive blank=" + blank + " src=" + active.item.source);
                         active.web.evaluateJavascript(JS_ACTIVE, null);
-
                     }
                     boolean settled = blank && blankSince != 0
                             && now - blankSince > 700;
@@ -663,6 +664,11 @@ public class Main extends Activity {
             }
         }
         loadingView.setVisibility(show ? View.VISIBLE : View.GONE);
+        if (show && active != null && active.web != null) {
+            // Nothing may keep playing behind the face; a provider page that is
+            // still running is heard as a second audio stream.
+            active.web.evaluateJavascript(JS_IDLE, null);
+        }
         if (show && controlsBar != null) {
             // A play/pause control over a loading screen looks broken.
             handler.removeCallbacks(hideControls);
@@ -1720,6 +1726,7 @@ public class Main extends Activity {
                     + "vs[i].pause();}}catch(e){}})()";
 
     private void silenceAndDestroy(final WebView web) {
+        igTrace("silence+destroy page");
         try {
             web.evaluateJavascript(JS_IDLE, null);
             web.loadUrl("about:blank");
@@ -2012,6 +2019,7 @@ public class Main extends Activity {
             // The page paints its own surface; the face is only for a feed with
             // nothing on screen at all.
             setLoading(false);
+            igTrace("promote page " + active.item.source);
             active.web.evaluateJavascript(JS_ACTIVE, null);
             // A provider player reports nothing when a clip finishes - and an
             // advert can hold it indefinitely - so a page slot is capped and
