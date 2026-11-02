@@ -81,11 +81,14 @@ public final class Prefs {
         Set<String> s = sp(c).getStringSet(KEY_SOURCES, null);
         if (s == null) {
             s = new LinkedHashSet<String>();
-            // Only YouTube can supply a random portrait feed on its own today;
-            // the rest stay listed so they can be switched on when they work.
-            s.add(Sources.YOUTUBE);
-            s.add(Sources.TIKTOK);
-            s.add(Sources.X);
+            // Everything is on out of the box except PeerTube, whose clips are
+            // long form and rarely portrait, so it would take more than it gives.
+            for (String source : Sources.ALL) {
+                if (Sources.PEERTUBE.equals(source)) {
+                    continue;
+                }
+                s.add(source);
+            }
         }
         return new LinkedHashSet<String>(s);
     }
