@@ -811,6 +811,10 @@ public class Main extends Activity {
         }
         if (loadingMessage != null) loadingMessage.setText("loading");
         filling = true;
+        if (destroyed) {
+            filling = false;
+            return;
+        }
         try { io.execute(new Runnable() {
             @Override
             public void run() {
@@ -844,7 +848,14 @@ public class Main extends Activity {
                         });
                     }
                 } finally {
-                    if (!found && attempts > 0) nextDiscoveryAt = android.os.SystemClock.uptimeMillis() + 2000;
+                    if (!found) {
+                        // Nothing came back from this source: leave starving mode
+                        // so the next pass rotates instead of insisting on one.
+                        starving = false;
+                        if (attempts > 0) {
+                            nextDiscoveryAt = android.os.SystemClock.uptimeMillis() + 2000;
+                        }
+                    }
                     filling = false;
                 }
                 handler.post(new Runnable() {
@@ -878,8 +889,10 @@ public class Main extends Activity {
             return null;
         }
         String source = pickSource(sources);
-        if (starving && sources.contains(Sources.YOUTUBE)) {
-            // YouTube resolves in about a second; the rest can take several.
+        if (starving && sources.contains(Sources.YOUTUBE)
+                && !Sources.YOUTUBE.equals(lastSource)) {
+            // YouTube resolves in about a second, but forcing it every attempt
+            // starves the feed when it is the thing that is failing.
             source = Sources.YOUTUBE;
         }
         String word = pickWord(source);
