@@ -159,24 +159,36 @@ final class Updater {
         }).start();
     }
 
+    /**
+     * The self-updating build is preferred. The release also carries a build
+     * that installs nothing by itself, and updating into that one would quietly
+     * take the updater away, so it is only used if nothing else is there.
+     */
     private static String apkUrl(JSONObject release) {
         JSONArray assets = release.optJSONArray("assets");
         if (assets == null) {
             return null;
         }
+        String fallback = null;
         for (int i = 0; i < assets.length(); i++) {
             JSONObject asset = assets.optJSONObject(i);
             if (asset == null) {
                 continue;
             }
             String name = asset.optString("name", "");
-            // One APK is published, so take whatever it is called rather than
-            // depending on a name that may change again.
-            if (name.endsWith(".apk")) {
-                return asset.optString("browser_download_url", null);
+            if (!name.endsWith(".apk")) {
+                continue;
             }
+            String url = asset.optString("browser_download_url", null);
+            if (name.contains("no-self-update")) {
+                if (fallback == null) {
+                    fallback = url;
+                }
+                continue;
+            }
+            return url;
         }
-        return null;
+        return fallback;
     }
 
     private static JSONObject fetch(String url) {

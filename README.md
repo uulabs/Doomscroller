@@ -65,20 +65,24 @@ point at your SDK; it is not committed.
 ## Releases
 
 UU Doomscroller is **not published on Google Play, and will not be**. It is
-distributed here as a single APK.
+distributed here as an APK.
 
-That APK updates itself: when a newer version exists it says so, downloads it
-and hands it to the Android installer. Installing anything over the top keeps
-your settings.
+| File | Use |
+| --- | --- |
+| `UUDoomscroller-<version>.apk` | The app. It checks for a newer version, downloads it and hands it to the Android installer. Recommended. |
+| `UUDoomscroller-<version>-no-self-update.apk` | The same app, except it never installs anything: when a newer version exists it opens this page and you install it yourself. |
 
-> **On Play Protect.** Downloading and launching an installer is the shape of a
-> dropper, so this build can be flagged. In testing so far it has not been. That
-> verdict is Google's and can change without notice, so if you are asked whether
-> to trust the install, the honest description is: it updates itself and does
-> nothing else.
+> **On Play Protect.** The self-updating build has not been flagged in testing,
+> so it is treated as safe by the devices used here. That is a verdict Google
+> can change whenever it likes, and "not flagged yet" is not the same as "safe".
+> An app that downloads and launches an installer is, by shape, doing what a
+> dropper does.
+>
+> If you would rather not grant that, use the second file. The only function you
+> give up is in-app updating.
 
-A build that never installs anything, and only opens this page when an update
-exists, can still be assembled from source:
+Both are the same app with the same signer and application id, so they install
+over one another and keep your settings.
 
 ```sh
 gradle :app:assembleStandardRelease
