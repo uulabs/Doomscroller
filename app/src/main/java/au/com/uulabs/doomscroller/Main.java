@@ -291,9 +291,20 @@ public class Main extends Activity {
                     @Override
                     public void onProgressChanged(android.widget.SeekBar seekBar,
                                                   int progress, boolean fromUser) {
-                        if (fromUser && active != null && active.player != null) {
+                        if (!fromUser) {
+                            return;
+                        }
+                        if (active == null) {
+                            return;
+                        }
+                        if (active.player != null) {
                             active.player.seekTo(progress * 1000L);
                             updateTimeLabel();
+                        } else if (active.web != null) {
+                            final String seek = "(function(){try{var v=document.querySelector"
+                                    + "('video');if(v)v.currentTime=" + progress
+                                    + ";}catch(e){}})()";
+                            active.web.evaluateJavascript(seek, null);
                         }
                     }
 
@@ -1411,6 +1422,14 @@ public class Main extends Activity {
                     + "try{var vs=document.querySelectorAll('video');"
                     + "for(var i=0;i<vs.length;i++){vs[i].muted=false;}}catch(e){}})()";
 
+    /** Reads the page player's position and length, in milliseconds. */
+    private static final String PAGE_TIME_JS =
+            "(function(){try{var v=document.querySelector('video');"
+                    + "if(!v||!isFinite(v.duration)||v.duration<=0)return '0|0';"
+                    + "return Math.round(v.currentTime*1000)+'|'"
+                    + "+Math.round(v.duration*1000)+'|'"
+                    + "+(v.paused?1:0);}catch(e){return '0|0|1';}})()";
+
     private static final String JS_IDLE =
             "(function(){window.__uuActive=false;"
                     + "try{var vs=document.querySelectorAll('video');"
@@ -1677,8 +1696,18 @@ public class Main extends Activity {
         boolean playable = active != null && active.player != null;
         controlsToggle.setAlpha(playable ? 1f : 0.35f);
         if (!playable) {
+            if (active != null && active.web != null) {
+                // The page keeps its own clock, so the bar has to read it.
+                controlsToggle.setAlpha(1f);
+                readPageTime(active.web);
+                return;
+            }
             controlsToggle.setText("\u25B6");
-            controlsTime.setText(active == null ? "" : "");
+            controlsTime.setText("");
+            if (controlsSeek != null) {
+                controlsSeek.setEnabled(false);
+                controlsSeek.setAlpha(0.35f);
+            }
             return;
         }
         controlsToggle.setText(active.player.isPlaying() ? "\u2016\u2016" : "\u25B6");
@@ -1694,11 +1723,67 @@ public class Main extends Activity {
             controlsSeek.setEnabled(true);
             controlsSeek.setAlpha(1f);
         } else if (controlsSeek != null) {
-            // A provider page reports no duration, so there is nothing to scrub.
             controlsSeek.setEnabled(false);
             controlsSeek.setAlpha(0.35f);
+            if (active != null && active.web != null) {
+                readPageTime(active.web);
+            } else {
+                controlsTime.setText("");
+            }
         }
-        updateTimeLabel();
+    }
+
+    /** A provider page keeps its own clock; ask it rather than guess. */
+    private void readPageTime(final WebView web) {
+        web.evaluateJavascript(PAGE_TIME_JS, new ValueCallback<String>() {
+            @Override
+            public void onReceiveValue(String value) {
+                if (active == null || active.web != web || value == null) {
+                    return;
+                }
+                String clean = unquote(value);
+                if (BuildConfig.DEBUG) try {
+                    java.io.FileOutputStream f = new java.io.FileOutputStream(
+                            new java.io.File(getFilesDir(), "controls.log"), true);
+                    f.write((clean + "\n").getBytes("UTF-8"));
+                    f.close();
+                } catch (Exception ignored) {
+                }
+                String[] parts = clean.split("\\|");
+                if (parts.length < 2) {
+                    return;
+                }
+                long position;
+                long duration;
+                try {
+                    position = Long.parseLong(parts[0].trim());
+                    duration = Long.parseLong(parts[1].trim());
+                } catch (NumberFormatException e) {
+                    return;
+                }
+                if (parts.length > 2) {
+                    controlsToggle.setText("1".equals(parts[2].trim())
+                            ? "\u25B6" : "\u2016\u2016");
+                }
+                if (duration <= 0) {
+                    controlsTime.setText("");
+                    controlsSeek.setEnabled(false);
+                    controlsSeek.setAlpha(0.35f);
+                    return;
+                }
+                int seconds = (int) (duration / 1000);
+                if (controlsSeek.getMax() != seconds) {
+                    controlsSeek.setMax(seconds);
+                }
+                controlsSeek.setEnabled(true);
+                controlsSeek.setAlpha(1f);
+                if (!seeking) {
+                    controlsSeek.setProgress((int) (position / 1000));
+                }
+                controlsTime.setText(formatTime(position) + "   -"
+                        + formatTime(duration - position));
+            }
+        });
     }
 
     private void updateTimeLabel() {
@@ -1728,6 +1813,13 @@ public class Main extends Activity {
             return;
         }
         if (active.player == null) {
+            // Provider pages own their player, so ask it directly.
+            if (active.web != null) {
+                active.web.evaluateJavascript(
+                        "(function(){try{var v=document.querySelector('video');"
+                                + "if(!v)return;if(v.paused){v.play();}else{v.pause();}}"
+                                + "catch(e){}})()", null);
+            }
             return;
         }
         if (active.player.isPlaying()) {
