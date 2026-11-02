@@ -926,6 +926,9 @@ public class Main extends Activity {
                     + "if(t.indexOf('currently unavailable')>=0"
                     + "||t.indexOf('video unavailable')>=0)return 'GONE';"
                     + "if(t.indexOf('more videos on tiktok')>=0)return 'END';"
+                    // A reel that has been deleted since the index saw it says so.
+                    + "if(t.indexOf('may be broken')>=0"
+                    + "||t.indexOf('post may have been removed')>=0)return 'GONE';"
                     + "var v=document.querySelector('video');"
                     + "if(!v)return 'NOSTREAM';"
                     + "if(window.__uuActive&&v.muted){v.muted=false;}"
@@ -1236,6 +1239,23 @@ public class Main extends Activity {
                 @Override
                 public void onPageFinished(final WebView view, String url) {
                     watchForUnavailable(view, 0);
+                    if (url != null && url.contains("instagram.com")) {
+                        // Instagram's embed draws an account header, a like and
+                        // comment footer and its own chrome. The feed shows one
+                        // clip and two of our buttons, so all of that goes.
+                        view.evaluateJavascript("(function(){try{"
+                                + "var s=document.createElement('style');"
+                                + "s.textContent='header,footer,section,nav{display:none!important}'"
+                                + "+'html,body{background:#000!important;margin:0!important;"
+                                + "overflow:hidden!important}'"
+                                + "+'article,.EmbeddedMedia,.EmbeddedMediaImage{"
+                                + "margin:0!important;padding:0!important;border:0!important;"
+                                + "max-width:100%!important;height:100vh!important}'"
+                                + "+'video,img{width:100%!important;height:100%!important;"
+                                + "object-fit:cover!important}';"
+                                + "document.head.appendChild(s);"
+                                + "}catch(e){}})()", null);
+                    }
                     // The feed shows a video and two of our buttons, nothing else.
                     // Their page draws its own overlay on every Short, so it is
                     // hidden as it loads.

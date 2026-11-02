@@ -34,8 +34,9 @@ public final class Sources {
     public static final String TIKTOK = "TikTok";
     public static final String X = "X";
     public static final String PEERTUBE = "PeerTube";
+    public static final String INSTAGRAM = "Instagram";
 
-    public static final String[] ALL = {YOUTUBE, TIKTOK, X, PEERTUBE};
+    public static final String[] ALL = {YOUTUBE, TIKTOK, X, PEERTUBE, INSTAGRAM};
 
     private static final String UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
             + "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
@@ -128,10 +129,46 @@ public final class Sources {
         if (X.equals(source)) {
             return x(word);
         }
+        if (INSTAGRAM.equals(source)) {
+            return instagram(word);
+        }
         if (PEERTUBE.equals(source)) {
             return peertube(word);
         }
         return Collections.emptyList();
+    }
+
+    // ------------------------------------------------------------- instagram
+
+    /**
+     * Reels have no anonymous discovery of their own: tag and profile pages hit
+     * a login wall. A general search index still carries permalinks, so a reel
+     * is found by asking for its host and path together with a subject, then
+     * played through Instagram's own embed, which renders without an account.
+     *
+     * The index is not fresh, so dead links are expected; the player treats
+     * Instagram's "post may have been removed" page as an ended clip.
+     */
+    private static List<Item> instagram(String word) throws IOException {
+        String query = "site:instagram.com/reel " + word;
+        String html = get("https://search.brave.com/search?q=" + enc(query), null);
+        Matcher m = Pattern.compile("instagram\\.com/reel/([A-Za-z0-9_-]{5,})")
+                .matcher(html);
+        List<Item> out = new ArrayList<Item>();
+        Set<String> seen = new HashSet<String>();
+        int index = 0;
+        while (m.find() && out.size() < 12) {
+            if (index++ < 2) {
+                continue;
+            }
+            String id = m.group(1);
+            if (!seen.add(id)) {
+                continue;
+            }
+            out.add(new Item(INSTAGRAM, id, "", "frame",
+                    "https://www.instagram.com/reel/" + id + "/embed/", 0, 0));
+        }
+        return out;
     }
 
     // --------------------------------------------------------------- youtube
