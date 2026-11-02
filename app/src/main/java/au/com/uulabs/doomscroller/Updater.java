@@ -170,7 +170,9 @@ final class Updater {
                 continue;
             }
             String name = asset.optString("name", "");
-            if (name.endsWith(".apk") && name.contains("selfupdate")) {
+            // One APK is published, so take whatever it is called rather than
+            // depending on a name that may change again.
+            if (name.endsWith(".apk")) {
                 return asset.optString("browser_download_url", null);
             }
         }
