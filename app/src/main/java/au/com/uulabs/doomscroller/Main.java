@@ -291,9 +291,14 @@ public class Main extends Activity {
     }
 
     /** The doomer face covers the gap before the first frame of a video. */
-    /** The face shows only when the feed has nothing on screen to show. */
+    /**
+     * Hides the face once something is on screen. It deliberately never shows
+     * it: appearing is left to the watch, which waits out a short blank first.
+     */
     private void refreshLoading() {
-        setLoading(active == null);
+        if (!screenIsBlank()) {
+            setLoading(false);
+        }
     }
 
     /**
@@ -308,6 +313,10 @@ public class Main extends Activity {
         // Once a clip has put a frame on screen it is never covered again, even
         // if it stutters back into buffering. Otherwise a player that re-buffers
         // would flash the face over a video that is plainly playing.
+        if (active.rootView != null
+                && Math.abs(active.rootView.getTranslationY()) > 1f) {
+            return true;   // the clip has left the screen and nothing replaced it
+        }
         if (active.rendered) {
             return false;
         }
