@@ -34,6 +34,13 @@ public final class Sources {
 
     public static final String[] ALL = {YOUTUBE, TIKTOK, X, PEERTUBE, INSTAGRAM, FACEBOOK};
 
+    private static final java.util.Random PICK = new java.util.Random();
+
+    /** Called once at startup so two installs sample different parts of a list. */
+    public static void setSalt(long salt) {
+        PICK.setSeed(salt ^ System.nanoTime());
+    }
+
     private static final String UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
             + "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
 
@@ -89,7 +96,7 @@ public final class Sources {
                 rows++;
             }
             List<String> f = new ArrayList<>(facebook), i = new ArrayList<>(instagram);
-            Collections.shuffle(f); Collections.shuffle(i);
+            Collections.shuffle(f, PICK); Collections.shuffle(i, PICK);
             FB_POOL.addAll(f); IG_POOL.addAll(i);
             fbAvailable = FB_POOL.size(); igAvailable = IG_POOL.size();
             reelCacheLoaded = true;
@@ -465,7 +472,10 @@ public final class Sources {
         // The first few results for a word are the same every time. Skipping
         // them samples the long tail, which is both less repetitive and more
         // in keeping with "completely random".
-        int skip = 3 + (int) (Math.random() * 9);
+        // Skipping only the first handful returns the same popular clips on
+        // every device. Sampling far deeper, from a per-install offset, spreads
+        // the choice out and reaches past what everyone else sees.
+        int skip = 8 + Math.abs(PICK.nextInt(40));
         int index = 0;
         while (m.find() && out.size() < 20) {
             if (index++ < skip) {
@@ -524,7 +534,7 @@ public final class Sources {
                     "https://www.tiktok.com/player/v1/" + id
                             + "?autoplay=1&loop=0&controls=0&music_info=0&description=0", 0, 0));
         }
-        Collections.shuffle(out);
+        Collections.shuffle(out, PICK);
         return out;
     }
 

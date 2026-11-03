@@ -125,6 +125,19 @@ public final class Prefs {
      * the same handful came round again next launch - which is what "the same video twice" looked
      * like from the outside.
      */
+    /**
+     * A random value fixed at install. Two phones running the same build then
+     * differ in which results they reach rather than marching in step.
+     */
+    public static long installSalt(Context c) {
+        long salt = sp(c).getLong("install_salt", 0L);
+        if (salt == 0L) {
+            salt = new java.util.Random().nextLong();
+            sp(c).edit().putLong("install_salt", salt).apply();
+        }
+        return salt;
+    }
+
     public static String playedIds(Context c) {
         return sp(c).getString("played_ids", "");
     }

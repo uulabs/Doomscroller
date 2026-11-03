@@ -80,7 +80,7 @@ public class Main extends Activity {
 
     private final ExecutorService io = Executors.newFixedThreadPool(2);
     private final Handler handler = new Handler(Looper.getMainLooper());
-    private final Random rand = new Random();
+    private Random rand = new Random();
     private final ArrayDeque<String> recentWords = new ArrayDeque<String>();
     private final ArrayDeque<String> recentChannels = new ArrayDeque<String>();
     private final ArrayDeque<Ready> ready = new ArrayDeque<Ready>();
@@ -219,6 +219,9 @@ public class Main extends Activity {
 
     private void buildUi() {
         Vocab.load(getAssets());
+        long salt = Prefs.installSalt(this);
+        rand = new Random(salt ^ System.nanoTime());
+        Sources.setSalt(salt);
         try { Sources.loadReelCache(getAssets().open("meta-reels.tsv")); }
         catch (java.io.IOException unavailable) { /* Live discovery remains available. */ }
         topicSampler = new TopicSampler(Vocab.topics(getAssets()), rand, new TopicSampler.State() {
