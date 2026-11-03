@@ -112,12 +112,14 @@ final class Updater {
                 }
                 continue;
             }
-            kept.append(line).append(' ');
+            kept.append(line).append('\n');
             if (kept.length() > 420) {
                 break;
             }
         }
-        String text = kept.toString().replaceAll("\\s+", " ").trim();
+        String text = kept.toString().trim();
+        // Keep the bullets on their own lines; only tidy the whitespace inside.
+        text = text.replaceAll("[ \t]+", " ").replaceAll("\n{3,}", "\n\n");
         return text.length() > 420 ? text.substring(0, 417) + "..." : text;
     }
 
