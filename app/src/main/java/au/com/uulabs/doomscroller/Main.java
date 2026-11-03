@@ -134,6 +134,7 @@ public class Main extends Activity {
             java.util.Arrays.asList(Sources.INSTAGRAM, Sources.FACEBOOK));
 
     private static final class Ready {
+        String title = "";
         final Sources.Item item;
         final String url;
         final boolean page;
@@ -150,6 +151,7 @@ public class Main extends Activity {
 
     private static final class Slot {
         String url;
+        String title = "";     // what this clip is called, for repeat checking
         int navigation;
         long shownAt;
         boolean rendered;
@@ -985,12 +987,17 @@ public class Main extends Activity {
                     continue;   // already queued or played by another pass
                 }
                 String shownTitle = Sources.YOUTUBE.equals(item.source)
-                        ? ytResolver.lastTitle() : item.title;
+                        ? ytResolver.lastTitle()
+                        : (Sources.INSTAGRAM.equals(item.source)
+                        || Sources.TIKTOK.equals(item.source))
+                        ? Sources.lastCaption : item.title;
                 if (!titleIsNew(shownTitle)) {
                     igTrace("repeat title refused");
                     continue;
                 }
-                return new Ready(item, url, isPage(item), lastLandscape);
+                Ready ready = new Ready(item, url, isPage(item), lastLandscape);
+                ready.title = shownTitle == null ? "" : shownTitle;
+                return ready;
             }
             remember(item.toString());
         }
@@ -1539,6 +1546,7 @@ public class Main extends Activity {
         }
         Slot slot = new Slot();
         slot.item = r.item;
+        slot.title = r.title == null ? "" : r.title;
         slot.navigation = r.navigation;
         slot.url = r.url;
         if (r.page) {
@@ -2082,7 +2090,8 @@ public class Main extends Activity {
         if (BuildConfig.DEBUG) try {
             java.io.FileOutputStream f = new java.io.FileOutputStream(
                     new java.io.File(getFilesDir(), "play.log"), true);
-            f.write((current.source + " " + current.id + "\n").getBytes("UTF-8"));
+            f.write((current.source + "\t" + current.id + "\t"
+                    + titleKey(active.title) + "\n").getBytes("UTF-8"));
             f.close();
         } catch (Exception ignored) {
         }

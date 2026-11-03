@@ -435,6 +435,7 @@ public final class Sources {
      * language signal a reel has: the embed page we play carries no text at all.
      */
     public static String instagramCaptionLanguage(String id) {
+        lastCaption = "";
         try {
             String href = java.net.URLEncoder.encode(
                     "https://www.instagram.com/reel/" + id + "/", "UTF-8");
@@ -449,6 +450,7 @@ public final class Sources {
             }
             lastCaptionNote = "bytes=" + json.length();
             String title = new org.json.JSONObject(json).optString("title", "");
+            lastCaption = title;
             lastCaptionNote += " title=" + title.length();
             String spoken = Vocab.detect(title);
             return spoken != null ? spoken : Vocab.detectLatin(title);
@@ -465,11 +467,14 @@ public final class Sources {
      */
     /** Set by the last caption lookup so the caller can report why it failed. */
     public static String lastCaptionNote = "";
+    /** Caption of the candidate last looked at, for duplicate auditing. */
+    public static String lastCaption = "";
 
     private static final String MOBILE_UA = "Mozilla/5.0 (Linux; Android 15; Pixel 8) "
             + "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Mobile Safari/537.36";
 
     public static String tiktokCaptionLanguage(String id) {
+        lastCaption = "";
         try {
             String html = getAs("https://www.tiktok.com/@x/video/" + id, UI_MOBILE_UA);
             lastCaptionNote = "bytes=" + html.length();
@@ -487,6 +492,7 @@ public final class Sources {
                 return null;
             }
             String caption = h.substring(from, Math.min(to, from + 400));
+            lastCaption = caption;
             String spoken = Vocab.detect(caption);
             return spoken != null ? spoken : Vocab.detectLatin(caption);
         } catch (Exception e) {
