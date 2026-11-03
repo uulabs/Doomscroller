@@ -86,13 +86,18 @@ public class Main extends Activity {
     private final ArrayDeque<Ready> ready = new ArrayDeque<Ready>();
     private final ArrayDeque<Ready> history = new ArrayDeque<Ready>();
     private final Set<String> seen = new LinkedHashSet<String>();
+    /**
+     * Normalised titles already shown. Re-uploads of one clip carry different ids
+     * and often the same title, so ids alone cannot catch them.
+     */
+    private final Set<String> recentTitles = new LinkedHashSet<String>();
     /** Ids that have actually been shown, so forward scrolling cannot repeat one. */
     private final Set<String> played = new LinkedHashSet<String>();
     private boolean seenDirty;
     private int seenAdds;
 
     /** How many played ids are remembered. Small enough to keep, large enough to matter. */
-    private static final int SEEN_LIMIT = 1500;
+    private static final int SEEN_LIMIT = 10000;
 
     private Slot active;
     private Slot pending;
@@ -451,7 +456,7 @@ public class Main extends Activity {
     private void markPlayed(String id) {
         synchronized (played) {
             played.add(id);
-            while (played.size() > 2000) {
+            while (played.size() > 10000) {
                 java.util.Iterator<String> it = played.iterator();
                 it.next();
                 it.remove();
@@ -470,6 +475,44 @@ public class Main extends Activity {
     private boolean isPlayed(String id) {
         synchronized (played) {
             return played.contains(id);
+        }
+    }
+
+    /** Lower-case letters only, so punctuation, emoji and casing do not matter. */
+    private static String titleKey(String title) {
+        if (title == null) {
+            return "";
+        }
+        StringBuilder out = new StringBuilder();
+        String lower = title.toLowerCase(java.util.Locale.ROOT);
+        for (int i = 0; i < lower.length() && out.length() < 80; i++) {
+            char c = lower.charAt(i);
+            if ((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == ' ') {
+                out.append(c);
+            } else if (c > 127) {
+                out.append(c);   // keep other scripts as they are
+            }
+        }
+        return out.toString().replaceAll(" +", " ").trim();
+    }
+
+    /** True when this title has not been shown; records it when new. */
+    private boolean titleIsNew(String title) {
+        String key = titleKey(title);
+        if (key.length() < 6) {
+            return true;         // too short to judge, do not block on it
+        }
+        synchronized (recentTitles) {
+            if (recentTitles.contains(key)) {
+                return false;
+            }
+            recentTitles.add(key);
+            while (recentTitles.size() > 4000) {
+                java.util.Iterator<String> it = recentTitles.iterator();
+                it.next();
+                it.remove();
+            }
+            return true;
         }
     }
 
@@ -940,6 +983,12 @@ public class Main extends Activity {
             if (url != null) {
                 if (!rememberIfNew(item)) {
                     continue;   // already queued or played by another pass
+                }
+                String shownTitle = Sources.YOUTUBE.equals(item.source)
+                        ? ytResolver.lastTitle() : item.title;
+                if (!titleIsNew(shownTitle)) {
+                    igTrace("repeat title refused");
+                    continue;
                 }
                 return new Ready(item, url, isPage(item), lastLandscape);
             }
