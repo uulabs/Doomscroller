@@ -70,10 +70,11 @@ final class Updater {
                         return;
                     }
                     final String apk = BuildConfig.SELF_UPDATE ? apkUrl(release) : null;
+                    final String notes = notes(release.optString("body", ""));
                     activity.runOnUiThread(new Runnable() {
                         @Override
                         public void run() {
-                            offer(activity, latest, page, apk);
+                            offer(activity, latest, page, apk, notes);
                         }
                     });
                 } catch (Exception ignored) {
@@ -93,14 +94,42 @@ final class Updater {
                 "OK", null, null);
     }
 
+    /** What changed, as the release describes it, cut down to fit a dialog. */
+    private static String notes(String body) {
+        if (body == null || body.isEmpty()) {
+            return "";
+        }
+        StringBuilder kept = new StringBuilder();
+        for (String raw : body.split("\n")) {
+            String line = raw.trim();
+            if (line.isEmpty() || line.startsWith("#") || line.startsWith("|")
+                    || line.startsWith("---") || line.startsWith("```")
+                    || line.toLowerCase().startsWith("which file")
+                    || line.toLowerCase().startsWith("verify")
+                    || line.toLowerCase().startsWith("to check a download")) {
+                if (line.startsWith("#") && kept.length() > 0) {
+                    break;   // stop at the next section
+                }
+                continue;
+            }
+            kept.append(line).append(' ');
+            if (kept.length() > 420) {
+                break;
+            }
+        }
+        String text = kept.toString().replaceAll("\\s+", " ").trim();
+        return text.length() > 420 ? text.substring(0, 417) + "..." : text;
+    }
+
     private static void offer(final Activity activity, String version,
-                              final String page, final String apk) {
+                              final String page, final String apk, final String notes) {
         if (activity.isFinishing()) {
             return;
         }
-        String body = apk != null
-                ? "A newer version is available. Download and install it now?"
-                : "A newer version is available. Open the release page to download it?";
+        String lead = apk != null
+                ? "Download and install it now?"
+                : "Open the release page to download it?";
+        String body = notes.isEmpty() ? lead : notes + "\n\n" + lead;
         AppDialog.show(activity, "UU Doomscroller " + version, body,
                 apk != null ? "Download" : "Open", new Runnable() {
                     @Override

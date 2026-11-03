@@ -439,10 +439,21 @@ public final class Sources {
             String href = java.net.URLEncoder.encode(
                     "https://www.instagram.com/reel/" + id + "/", "UTF-8");
             String json = get("https://www.instagram.com/api/v1/oembed/?url=" + href, null);
+            if (!json.trim().startsWith("{")) {
+                // Throttled or an error page; one retry, then treat as unknown.
+                try {
+                    Thread.sleep(400);
+                } catch (InterruptedException ignored) {
+                }
+                json = get("https://www.instagram.com/api/v1/oembed/?url=" + href, null);
+            }
+            lastCaptionNote = "bytes=" + json.length();
             String title = new org.json.JSONObject(json).optString("title", "");
+            lastCaptionNote += " title=" + title.length();
             String spoken = Vocab.detect(title);
             return spoken != null ? spoken : Vocab.detectLatin(title);
         } catch (Exception e) {
+            lastCaptionNote = "err " + e.getClass().getSimpleName();
             return null;
         }
     }

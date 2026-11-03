@@ -966,6 +966,8 @@ public class Main extends Activity {
         }
         if ("igprobe".equals(item.kind)) {
             String spoken = Sources.instagramCaptionLanguage(item.id);
+            igTrace("ig caption " + (spoken == null ? "none" : spoken)
+                    + " (" + Sources.lastCaptionNote + ")");
             if (spoken != null && !Prefs.languages(this).contains(spoken)) {
                 igTrace("skip ig caption " + spoken);
                 return null;
@@ -1149,8 +1151,12 @@ public class Main extends Activity {
                     + "var v=document.querySelector('video');"
                     + "if(!v)return 'NOSTREAM';"
                     + "if(window.__uuActive&&v.muted){v.muted=false;}"
+                    // A provider player can sit paused after it loads, not only
+                    // at the very start. Nudging it anywhere before the end gets
+                    // a stalled clip going again without fighting its end card.
                     + "if(window.__uuActive&&v.paused&&!v.ended"
-                    + "&&v.currentTime<0.6){try{v.play();}catch(e){}}"
+                    + "&&(!isFinite(v.duration)||v.duration<=0"
+                    + "||v.currentTime<v.duration-1)){try{v.play();}catch(e){}}"
                     + "if(v.ended)return 'END';"
                     // A stalled playhead is only an ending when the element is
                     // not waiting for data. Buffering looks identical otherwise,

@@ -206,8 +206,33 @@ public final class Vocab {
         if (bestHits >= 2 && bestHits > english) {
             return best;
         }
+        // Short captions often carry one clear word and nothing else. When no
+        // English marker is present at all, one of these is good evidence.
+        if (english == 0 && best != null) {
+            for (String strong : STRONG) {
+                String[] parts = strong.split(":");
+                if (parts[0].equals(best) && padded.contains(" " + parts[1] + " ")) {
+                    return best;
+                }
+            }
+        }
         return null;
     }
+
+    /** Words that rarely appear in English, so one alone settles a short caption. */
+    private static final String[] STRONG = {
+        "es:que", "es:para", "es:los", "es:las", "es:una",
+        "pt:não", "pt:uma", "pt:muito", "pt:isso",
+        "fr:les", "fr:une", "fr:avec", "fr:pour", "fr:très",
+        "de:und", "de:nicht", "de:eine", "de:auch",
+        "it:che", "it:non", "it:della", "it:sono",
+        "id:yang", "id:dan", "id:untuk", "id:tidak", "id:dengan",
+        "tr:bir", "tr:için", "tr:değil",
+        "nl:het", "nl:niet", "nl:voor",
+        "pl:się", "pl:jest", "pl:nie",
+        "vi:của", "vi:không", "vi:những",
+        "tl:ang", "tl:mga", "tl:hindi",
+    };
 
     /** Latin-script stops, enough to separate the common European languages. */
     private static final String[][] LATIN_STOPS = {
@@ -219,6 +244,10 @@ public final class Vocab {
         {"it", "che non una dei della sono molto anche questo gli"},
         {"id", "yang dan ini itu dengan untuk tidak dari akan"},
         {"tr", "bir ve bu için ile çok daha olarak değil"},
+        {"nl", "het een van dat niet met voor zijn maar ook nog wel"},
+        {"pl", "nie i się jest na to jak ale po tak bardzo"},
+        {"vi", "của và là không có được người những cho với"},
+        {"tl", "ang ng mga sa na hindi ito para kaso ako siya"},
     };
 
     /**
