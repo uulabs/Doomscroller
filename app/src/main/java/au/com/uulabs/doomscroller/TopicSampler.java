@@ -49,6 +49,13 @@ public final class TopicSampler {
         if(domains==null || domains.isEmpty())throw new IllegalStateException("No topic catalogue");
         List<String> ds=new ArrayList<>(domains.keySet());
         String domain=ds.get(draw("topics-v1.domains."+lang,ds));
+        // Two subjects from one domain in a row reads as a rut, especially when
+        // the domain is small. Draw once more rather than accept a repeat.
+        String lastDomain=state.get("topics-v1.lastdomain");
+        for(int tries=0; tries<3 && ds.size()>1 && domain.equals(lastDomain); tries++) {
+            domain=ds.get(draw("topics-v1.domains."+lang,ds));
+        }
+        state.put("topics-v1.lastdomain",domain);
         List<Topic> topics=domains.get(domain);List<String> ids=new ArrayList<>();
         for(Topic t:topics)ids.add(t.id+":"+t.query);
         // Related concepts in another language should not immediately repeat.

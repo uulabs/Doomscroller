@@ -498,6 +498,40 @@ public class Main extends Activity {
         return out.toString().replaceAll(" +", " ").trim();
     }
 
+    private final Set<String> mediaSeen = new LinkedHashSet<String>();
+
+    /** Fingerprint of the resolved stream, so one video cannot arrive twice. */
+    private boolean mediaIsNew(String url) {
+        if (url == null || url.isEmpty()) {
+            return true;
+        }
+        String key;
+        try {
+            java.security.MessageDigest md =
+                    java.security.MessageDigest.getInstance("SHA-256");
+            byte[] digest = md.digest(url.getBytes("UTF-8"));
+            StringBuilder hex = new StringBuilder();
+            for (int i = 0; i < 8; i++) {
+                hex.append(String.format("%02x", digest[i]));
+            }
+            key = hex.toString();
+        } catch (Exception e) {
+            key = url.substring(0, Math.min(60, url.length()));
+        }
+        synchronized (mediaSeen) {
+            if (mediaSeen.contains(key)) {
+                return false;
+            }
+            mediaSeen.add(key);
+            while (mediaSeen.size() > 4000) {
+                java.util.Iterator<String> it = mediaSeen.iterator();
+                it.next();
+                it.remove();
+            }
+            return true;
+        }
+    }
+
     /** True when this title has not been shown; records it when new. */
     private boolean titleIsNew(String title) {
         String key = titleKey(title);
@@ -979,6 +1013,8 @@ public class Main extends Activity {
             else broadenMeta.remove(source);
         }
         lastSource = source;
+        igTrace("candidates " + source + " " + candidates.size()
+                + " word=" + word);
         List<Sources.Item> filtered = filter(candidates);
         for (Sources.Item item : filtered) {
             String url = resolve(item);
@@ -995,12 +1031,19 @@ public class Main extends Activity {
                     igTrace("repeat title refused");
                     continue;
                 }
+                if ((Sources.INSTAGRAM.equals(item.source)
+                        || Sources.FACEBOOK.equals(item.source))
+                        && !mediaIsNew(url)) {
+                    igTrace("repeat media refused " + item.source);
+                    continue;
+                }
                 Ready ready = new Ready(item, url, isPage(item), lastLandscape);
                 ready.title = shownTitle == null ? "" : shownTitle;
                 return ready;
             }
             remember(item.toString());
         }
+        igTrace("produce none " + source);
         return null;
     }
 
