@@ -2047,6 +2047,28 @@ public class Main extends Activity {
         }
         paused = false;
         setStatus(null);
+        // A provider page can still be holding audio focus when the next clip
+        // starts, which leaves the player prepared but not playing. Nothing was
+        // asked to pause here, so a short check puts it right.
+        if (active.player != null) {
+            final Slot started = active;
+            for (int delay : new int[]{700, 1800}) {
+                handler.postDelayed(new Runnable() {
+                    @Override
+                    public void run() {
+                        if (destroyed || gateOpen || paused || active != started
+                                || started.player == null || started.rejected) {
+                            return;
+                        }
+                        if (started.player.getPlaybackState() == Player.STATE_READY
+                                && !started.player.isPlaying()) {
+                            igTrace("resumed stalled clip " + started.item.source);
+                            started.player.play();
+                        }
+                    }
+                }, delay);
+            }
+        }
         handler.post(new Runnable() {
             @Override
             public void run() {
