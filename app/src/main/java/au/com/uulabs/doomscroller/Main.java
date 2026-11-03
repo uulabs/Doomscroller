@@ -163,6 +163,7 @@ public class Main extends Activity {
     @Override
     protected void onCreate(Bundle state) {
         loadSeen();
+        loadPlayed();
         super.onCreate(state);
         buildUi();
         applyInsets();
@@ -413,6 +414,22 @@ public class Main extends Activity {
         setContentView(root);
     }
 
+    /** Restores what has been shown, so a restart cannot repeat a clip either. */
+    private void loadPlayed() {
+        String csv = Prefs.playedIds(this);
+        if (csv == null || csv.isEmpty()) {
+            return;
+        }
+        synchronized (played) {
+            for (String one : csv.split(",")) {
+                if (!one.isEmpty()) {
+                    played.add(one);
+                }
+            }
+        }
+        igTrace("played loaded=" + played.size());
+    }
+
     private void loadSeen() {
         String csv = Prefs.seenIds(this);
         if (csv == null || csv.isEmpty()) {
@@ -434,6 +451,11 @@ public class Main extends Activity {
     private void markPlayed(String id) {
         synchronized (played) {
             played.add(id);
+            while (played.size() > 2000) {
+                java.util.Iterator<String> it = played.iterator();
+                it.next();
+                it.remove();
+            }
             StringBuilder csv = new StringBuilder();
             for (String one : played) {
                 if (csv.length() > 0) {
@@ -442,11 +464,6 @@ public class Main extends Activity {
                 csv.append(one);
             }
             Prefs.setPlayedIds(this, csv.toString());
-            while (played.size() > 2000) {
-                java.util.Iterator<String> it = played.iterator();
-                it.next();
-                it.remove();
-            }
         }
     }
 
@@ -2445,6 +2462,9 @@ public class Main extends Activity {
         if (settingsPanel != null) {
             root.removeView(settingsPanel);
             settingsPanel = null;
+            if (settingsButton != null) settingsButton.setVisibility(View.VISIBLE);
+            if (shareButton != null) shareButton.setVisibility(View.VISIBLE);
+            if (rotateButton != null) updateRotateControl();
             manualRotation = false;
             applyOrientation();
             updateRotateControl();
@@ -2475,6 +2495,10 @@ public class Main extends Activity {
             active.player.pause();
         }
         settingsPanel = buildSettings();
+        // The overlay buttons would sit on top of the panel's own text.
+        if (settingsButton != null) settingsButton.setVisibility(View.GONE);
+        if (shareButton != null) shareButton.setVisibility(View.GONE);
+        if (rotateButton != null) rotateButton.setVisibility(View.GONE);
         root.addView(settingsPanel, match());
     }
 

@@ -22,8 +22,8 @@ android {
         applicationId "au.com.uulabs.doomscroller"
         minSdk 26
         targetSdk 35
-        versionCode 37
-        versionName "0.1.36"
+        versionCode 38
+        versionName "0.1.37"
     }
 
     // Two distributions from one codebase. `standard` never installs anything

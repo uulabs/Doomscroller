@@ -181,6 +181,15 @@ final class SettingsUi {
 
         // ---- languages, last and collapsed: fifteen rows is a long list
         column.addView(sectionLabel(context, "Languages", "Words the feed searches for"));
+        TextView languageNote = new TextView(context);
+        languageNote.setText("Instagram and TikTok clips are checked against their caption. "
+                + "Facebook does not publish captions without a login, so a Facebook clip "
+                + "may appear in a language you have not selected.");
+        languageNote.setTextColor(MUTED);
+        languageNote.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12.5f);
+        languageNote.setLineSpacing(dp(context, 3), 1f);
+        languageNote.setPadding(dp(context, 4), 0, dp(context, 4), dp(context, 10));
+        column.addView(languageNote);
         LinearLayout languageCard = card(context);
 
         final LinearLayout languageRows = new LinearLayout(context);
