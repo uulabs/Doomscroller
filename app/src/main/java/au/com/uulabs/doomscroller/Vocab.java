@@ -160,6 +160,55 @@ public final class Vocab {
         return held == null ? 0 : held.size();
     }
 
+    private static final String[][] LATIN_MARKERS = {
+        {"es", " el la los las que de del y en un una para con por es su sus más pero como muy al se no lo" },
+        {"pt", " que não uma para com isso dos das um uma você mais como mas ao se na no por sua seu" },
+        {"fr", " le la les des que est une un pour avec dans sur pas plus au ce cette il elle nous vous" },
+        {"de", " der die das und ist nicht ein eine mit für auf sich dem den des auch wie bei aus" },
+        {"it", " il la che di un una per con non sono questo questa più anche come ma del della" },
+        {"id", " yang dan di ini itu dengan untuk tidak dari ke pada saya kami mereka akan sudah ada" },
+    };
+
+    private static final String[] ENGLISH_MARKERS = ("the and of to is in you that it for on with "
+            + "this are was but not have from they his her what about just").split(" ");
+
+    /**
+     * Guesses a Latin-script language from its most common words. Two distinct
+     * markers of one language, and more of them than English has, is required:
+     * a stray foreign word in an English caption is not a foreign caption.
+     */
+    public static String detectLatin(String text) {
+        if (text == null || text.length() < 12) {
+            return null;
+        }
+        String padded = " " + text.toLowerCase(java.util.Locale.ROOT)
+                .replaceAll("[^\\p{L} ]", " ").replaceAll("\\s+", " ") + " ";
+        int english = 0;
+        for (String w : ENGLISH_MARKERS) {
+            if (padded.contains(" " + w + " ")) {
+                english++;
+            }
+        }
+        String best = null;
+        int bestHits = 0;
+        for (String[] lang : LATIN_MARKERS) {
+            int hits = 0;
+            for (String w : lang[1].trim().split(" ")) {
+                if (padded.contains(" " + w + " ")) {
+                    hits++;
+                }
+            }
+            if (hits > bestHits) {
+                bestHits = hits;
+                best = lang[0];
+            }
+        }
+        if (bestHits >= 2 && bestHits > english) {
+            return best;
+        }
+        return null;
+    }
+
     /** Latin-script stops, enough to separate the common European languages. */
     private static final String[][] LATIN_STOPS = {
         {"en", "the and with this that from your are is"},
@@ -209,8 +258,13 @@ public final class Vocab {
         if (hangul > 0) {
             return "ko";
         }
+        if (han > latin * 2) {
+            // Kana was absent, so this is not written Japanese. Treating it as
+            // unknown let Chinese clips through an English-only filter.
+            return "zh";
+        }
         if (han > latin) {
-            return null; // Han-only text may also be Japanese; do not guess.
+            return null;
         }
         if (arabic > latin) {
             return "ar";

@@ -105,6 +105,38 @@ public final class Sources {
 
     // ------------------------------------------------------------------ http
 
+    private static final String UI_MOBILE_UA = "Mozilla/5.0 (Linux; Android 15; Pixel 8) "
+            + "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Mobile Safari/537.36";
+
+    /** Some pages refuse the desktop agent the rest of discovery uses. */
+    private static String getAs(String url, String ua) throws IOException {
+        HttpURLConnection c = (HttpURLConnection) new URL(url).openConnection();
+        c.setConnectTimeout(12000);
+        c.setReadTimeout(20000);
+        c.setRequestProperty("User-Agent", ua);
+        c.setRequestProperty("Accept", "text/html,application/xhtml+xml");
+        c.setRequestProperty("Accept-Language", "en-AU,en;q=0.9");
+        c.setRequestProperty("Accept-Encoding", "gzip");
+        c.setInstanceFollowRedirects(true);
+        int code = c.getResponseCode();
+        InputStream in = code >= 400 ? c.getErrorStream() : c.getInputStream();
+        if (in == null) {
+            return "";
+        }
+        if ("gzip".equalsIgnoreCase(c.getContentEncoding())) {
+            in = new java.util.zip.GZIPInputStream(in);
+        }
+        java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
+        byte[] buf = new byte[8192];
+        int n;
+        while ((n = in.read(buf)) > 0) {
+            out.write(buf, 0, n);
+        }
+        in.close();
+        c.disconnect();
+        return out.toString("UTF-8");
+    }
+
     private static String get(String url, String cookie) throws IOException {
         return get(url, cookie, false);
     }
@@ -398,6 +430,60 @@ public final class Sources {
     private static volatile long igFreshAt;
     private static volatile long igBlockedUntil;
 
+    /**
+     * Instagram's public oEmbed returns the reel's caption, which is the only
+     * language signal a reel has: the embed page we play carries no text at all.
+     */
+    public static String instagramCaptionLanguage(String id) {
+        try {
+            String href = java.net.URLEncoder.encode(
+                    "https://www.instagram.com/reel/" + id + "/", "UTF-8");
+            String json = get("https://www.instagram.com/api/v1/oembed/?url=" + href, null);
+            String title = new org.json.JSONObject(json).optString("title", "");
+            String spoken = Vocab.detect(title);
+            return spoken != null ? spoken : Vocab.detectLatin(title);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /**
+     * TikTok's embed shows no caption, but the ordinary video page carries it in
+     * its own data. That is the only language signal an anonymous TikTok clip
+     * has, so it is fetched once per candidate that is about to be played.
+     */
+    /** Set by the last caption lookup so the caller can report why it failed. */
+    public static String lastCaptionNote = "";
+
+    private static final String MOBILE_UA = "Mozilla/5.0 (Linux; Android 15; Pixel 8) "
+            + "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Mobile Safari/537.36";
+
+    public static String tiktokCaptionLanguage(String id) {
+        try {
+            String html = getAs("https://www.tiktok.com/@x/video/" + id, UI_MOBILE_UA);
+            lastCaptionNote = "bytes=" + html.length();
+            // The page escapes its own JSON, so quotes arrive as \" and the
+            // slashes as \/. Normalise first, then read the field directly.
+            String h = html.replace("\\/", "/").replace("\\\"", "\"");
+            int at = h.indexOf("\"desc\":\"");
+            if (at < 0) {
+                lastCaptionNote = "no desc in " + html.length();
+                return null;
+            }
+            int from = at + 8;
+            int to = h.indexOf('"', from);
+            if (to <= from) {
+                return null;
+            }
+            String caption = h.substring(from, Math.min(to, from + 400));
+            String spoken = Vocab.detect(caption);
+            return spoken != null ? spoken : Vocab.detectLatin(caption);
+        } catch (Exception e) {
+            lastCaptionNote = "err " + e.getClass().getSimpleName();
+            return null;
+        }
+    }
+
     private static List<Item> instagram(String word) throws IOException {
         long now = System.currentTimeMillis();
         if (IG_POOL.isEmpty() && now > igBlockedUntil
@@ -510,7 +596,7 @@ public final class Sources {
             }
             out.add(new Item(TIKTOK, id, "", "frame",
                     "https://www.tiktok.com/player/v1/" + id
-                            + "?autoplay=1&loop=0&controls=0&music_info=0&description=0", 0, 0));
+                            + "?autoplay=1&loop=0&controls=0&music_info=1&description=1", 0, 0));
         }
         if (!out.isEmpty()) {
             return out;
@@ -532,7 +618,7 @@ public final class Sources {
             }
             out.add(new Item(TIKTOK, id, "", "frame",
                     "https://www.tiktok.com/player/v1/" + id
-                            + "?autoplay=1&loop=0&controls=0&music_info=0&description=0", 0, 0));
+                            + "?autoplay=1&loop=0&controls=0&music_info=1&description=1", 0, 0));
         }
         Collections.shuffle(out, PICK);
         return out;

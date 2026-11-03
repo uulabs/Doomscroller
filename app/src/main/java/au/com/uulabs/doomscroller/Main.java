@@ -151,6 +151,7 @@ public class Main extends Activity {
         boolean sizeKnown;     // the decoded stream has reported its geometry
         float displayRatio;    // width * pixel ratio / height
         boolean rejected;      // refused admission, so never history
+        int langTries;         // how often the page's text has been read
         boolean watcherStarted;
         ExoPlayer player;      // null for page slots
         PlayerView view;       // null for page slots
@@ -932,12 +933,26 @@ public class Main extends Activity {
 
     /** Every source must yield a direct stream; anything else is dropped. */
     private String resolve(Sources.Item item) {
+        if (Sources.TIKTOK.equals(item.source)) {
+            String spoken = Sources.tiktokCaptionLanguage(item.id);
+            igTrace("tiktok caption " + (spoken == null ? "none" : spoken)
+                    + " (" + Sources.lastCaptionNote + ")");
+            if (spoken != null && !Prefs.languages(this).contains(spoken)) {
+                igTrace("skip tiktok caption " + spoken);
+                return null;
+            }
+        }
         if ("fbprobe".equals(item.kind)) {
             String media = Sources.facebookMedia(item.id);
             igTrace("fb " + item.id + " -> " + (media == null ? "NOMEDIA" : "ok"));
             return media;
         }
         if ("igprobe".equals(item.kind)) {
+            String spoken = Sources.instagramCaptionLanguage(item.id);
+            if (spoken != null && !Prefs.languages(this).contains(spoken)) {
+                igTrace("skip ig caption " + spoken);
+                return null;
+            }
             String direct = Sources.instagramMedia(item.id);
             if (direct != null) {
                 igTrace(item.id + (direct.isEmpty() ? " -> public embed unavailable" : " -> direct metadata"));
@@ -1707,6 +1722,30 @@ public class Main extends Activity {
             "(function(){window.__uuActive=true;"
                     + "try{var vs=document.querySelectorAll('video');"
                     + "for(var i=0;i<vs.length;i++){vs[i].muted=false;}}catch(e){}})()";
+
+    /** A bounded sample of the page's own words, to tell what language it is. */
+    private static final String PAGE_TEXT_JS =
+            """
+            (function(){try{
+              var h=document.documentElement.innerHTML, out='';
+              function grab(key){
+                var i=h.indexOf(key), guard=0;
+                while(i>=0 && guard++<4){
+                  var c=h.indexOf(':', i+key.length);
+                  if(c<0)break;
+                  var q1=h.indexOf('"', c), q2=h.indexOf('"', q1+1);
+                  if(q1>0 && q2>q1) return h.substring(q1+1, q2);
+                  i=h.indexOf(key, i+key.length);
+                }
+                return '';
+              }
+              out=grab('"desc"')+' '+grab('"caption"')+' '+grab('"text"');
+              if(out.replace(/ /g,'').length<3){
+                out=(document.body&&document.body.innerText)||'';
+              }
+              return out.slice(0,400);
+            }catch(e){return '';}})()
+            """;
 
     /** Reads the page player's intrinsic size; layout size would prove nothing. */
     private static final String PAGE_SIZE_JS =
