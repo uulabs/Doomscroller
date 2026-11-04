@@ -1493,15 +1493,17 @@ public class Main extends Activity {
     private synchronized void noteSource(String source, boolean ok) {
         if (ok) {
             sourceStrikes.remove(source);
+            sourceRest.remove(source);
             return;
         }
         int strikes = sourceStrikes.containsKey(source) ? sourceStrikes.get(source) + 1 : 1;
         sourceStrikes.put(source, strikes);
-        if (strikes >= 3) {
-            long rest = Sources.TIKTOK.equals(source) ? 8L * 60 * 1000 : 4L * 60 * 1000;
-            sourceRest.put(source, System.currentTimeMillis() + rest);
-            sourceStrikes.remove(source);
-            igTrace("resting " + source + " for " + (rest / 60000) + " minutes");
+        if (strikes >= 2) {
+            // Measured: TikTok answers again about 15 seconds after refusing, so
+            // the rest starts there and doubles only while refusals continue.
+            long seconds = Math.min(120L, 15L << Math.min(3, strikes - 2));
+            sourceRest.put(source, System.currentTimeMillis() + seconds * 1000);
+            igTrace("resting " + source + " for " + seconds + "s");
         }
     }
 

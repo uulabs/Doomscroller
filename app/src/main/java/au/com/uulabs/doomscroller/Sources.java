@@ -603,7 +603,17 @@ public final class Sources {
      */
     private static List<Item> tiktok(String word) throws IOException {
         List<Item> out = new ArrayList<Item>();
-        String html = get("https://www.tiktok.com/embed/tag/" + enc(word), null);
+        String html = getTiktokTag(word);
+        if (html.isEmpty()) {
+            // One retry: TikTok refuses in short bursts and answers again within
+            // about fifteen seconds, so a single immediate failure is not a
+            // reason to stand the source down.
+            try {
+                Thread.sleep(2000);
+            } catch (InterruptedException ignored) {
+            }
+            html = getTiktokTag(word);
+        }
         Matcher m = Pattern.compile("tiktok\\.com/@[\\w.\\-]+/video/(\\d{15,25})").matcher(html);
         Set<String> seen = new HashSet<String>();
         while (m.find() && out.size() < 12) {
@@ -620,6 +630,16 @@ public final class Sources {
         // a loop over the same small pool. Returning nothing marks the source as
         // failing, which rests it and lets the feed carry on elsewhere.
         return out;
+    }
+
+    /** A tag page, or an empty string when TikTok refused this attempt. */
+    private static String getTiktokTag(String word) {
+        try {
+            String html = getAs("https://www.tiktok.com/embed/tag/" + enc(word), UI_MOBILE_UA);
+            return html.contains("/video/") ? html : "";
+        } catch (Exception e) {
+            return "";
+        }
     }
 
     /** The sitemap is the stable one: it enumerates video URLs directly. */
