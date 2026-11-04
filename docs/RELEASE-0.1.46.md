@@ -1,12 +1,10 @@
-- The screen no longer dims and locks while a clip is playing.
-- Coming back to the app resumes the clip instead of leaving a frozen frame.
-- Starting a clip now stops music from other apps, and playback pauses for a call or when headphones are unplugged.
-- The playback bar sits above the navigation bar instead of under it.
-- Sharing a TikTok clip now gives a normal video link rather than a bare player page.
-- The self-updating build checks a downloaded update against the published checksum before installing it, and says so if a download fails.
-- A launch without a network connection no longer puts off the update check for an hour.
-- Release builds no longer write diagnostic logs that grew without limit.
-- Swiping no longer rewrites the whole played-clip list on every swipe.
+- The screen stays on while a video is playing.
+- Switching back to the app carries on playing instead of showing a stuck picture.
+- Playing a video stops music from other apps, and pauses for a phone call or when you unplug headphones.
+- The play bar no longer sits under the buttons at the bottom of the screen.
+- Sharing a TikTok gives a normal TikTok link.
+- Updates are checked against the published checksum before installing, and you are told if a download fails.
+- Fewer small slowdowns while scrolling.
 
 | File | Use |
 | --- | --- |
