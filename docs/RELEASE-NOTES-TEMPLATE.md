@@ -1,11 +1,11 @@
-# Release notes template
+# Release notes
 
-One line per change, plain language, what the user sees. No measurements, no
-internals, no explanation of how it was found.
+One bullet per change. Plain language. Symptom only.
 
 ```
-- Fixed <symptom> when <situation>.
-- <Thing> now <does what>.
+- Fixed YouTube ...
+- Finally got Facebook language detection working.
+- Some other thing.
 ```
 
 Then the file table, unchanged. Delete everything else.
