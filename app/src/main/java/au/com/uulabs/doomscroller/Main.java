@@ -108,6 +108,8 @@ public class Main extends Activity {
     private volatile boolean destroyed;
     private TopicSampler topicSampler;
     private TextView loadingMessage;
+    private DoomerView doomer;
+    private boolean foreground;
     private final ArrayDeque<Ready> forward = new ArrayDeque<Ready>();
     private TextView controlsSource;
     private TextView rotateButton;
@@ -291,11 +293,11 @@ public class Main extends Activity {
         LinearLayout loading = new LinearLayout(this);
         loading.setOrientation(LinearLayout.VERTICAL);
         loading.setGravity(Gravity.CENTER);
-        ImageView face = new ImageView(this);
-        face.setImageResource(R.drawable.doomer);
-        loading.addView(face, new LinearLayout.LayoutParams(dp(210), dp(210)));
+        doomer = new DoomerView(this);
+        loading.addView(doomer, new LinearLayout.LayoutParams(dp(210), dp(210)));
         TextView label = new TextView(this);
         loadingMessage = label;
+        doomer.attachLabel(label);
         label.setText("loading");
         label.setTextColor(Color.parseColor("#AAFFFFFF"));
         label.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f);
@@ -400,6 +402,7 @@ public class Main extends Activity {
 
         root.addView(loadingView, match());
         loadingView.setVisibility(View.VISIBLE);
+        syncDoomer();
         videoShown = false;
 
         setContentView(root);
@@ -695,6 +698,7 @@ public class Main extends Activity {
                 Prefs.setDisclaimerAccepted(Main.this, true);
                 root.removeView(gate);
                 gateOpen = false;
+                syncDoomer();
                 if (active != null && active.web != null) {
                     active.web.evaluateJavascript(JS_ACTIVE, null);
                 }
@@ -711,6 +715,7 @@ public class Main extends Activity {
         root.addView(gate, match());
         // The notice is a gate, not a banner: playback waits for it.
         gateOpen = true;
+        syncDoomer();
         if (active != null && active.player != null) {
             active.player.pause();
         }
@@ -733,7 +738,7 @@ public class Main extends Activity {
                             && now - blankSince > 1500 && pending == null) {
                         // The clip has left and nothing is being measured or
                         // promoted, so say what the wait actually is.
-                        loadingMessage.setText("finding more");
+                        doomer.say("finding more");
                     }
                     if (!blank) {
                         blankSince = 0;
@@ -772,6 +777,7 @@ public class Main extends Activity {
             }
         }
         loadingView.setVisibility(show ? View.VISIBLE : View.GONE);
+        syncDoomer();
         if (show && active != null && active.web != null) {
             // Nothing may keep playing behind the face; a provider page that is
             // still running is heard as a second audio stream.
@@ -792,6 +798,14 @@ public class Main extends Activity {
                 shareButton.bringToFront();
             }
         }
+    }
+
+    /** The face only moves while it is actually on screen and the app is in front. */
+    private void syncDoomer() {
+        if (doomer == null) return;
+        boolean on = !destroyed && foreground && !gateOpen && loadingView != null
+                && loadingView.getVisibility() == View.VISIBLE;
+        if (on) doomer.start(); else doomer.stop();
     }
 
     private static String stateOf(Slot s) {
@@ -925,12 +939,12 @@ public class Main extends Activity {
                 Sources.retryDelayMillis(Prefs.sources(this)));
         if (wait > 0) {
             if (wait > 5000 && active == null && pending == null && loadingMessage != null)
-                loadingMessage.setText("Selected sources unavailable\nRetrying automatically");
+                doomer.say("Selected sources unavailable\nRetrying automatically");
             handler.removeCallbacks(retryDiscovery);
             handler.postDelayed(retryDiscovery, wait);
             return;
         }
-        if (loadingMessage != null) loadingMessage.setText("loading");
+        if (doomer != null) doomer.say("loading");
         filling = true;
         if (destroyed) {
             filling = false;
@@ -2558,6 +2572,8 @@ public class Main extends Activity {
     @Override
     protected void onPause() {
         super.onPause();
+        foreground = false;
+        syncDoomer();
         if (active != null && active.player != null) {
             active.player.pause();
         }
@@ -2574,6 +2590,8 @@ public class Main extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
+        foreground = true;
+        syncDoomer();
         if (active != null && active.player != null && !paused && !gateOpen
                 && settingsPanel == null && !active.rejected && portraitVerified(active)) {
             active.player.play();
@@ -2584,6 +2602,7 @@ public class Main extends Activity {
     protected void onDestroy() {
         super.onDestroy();
         destroyed = true;
+        if (doomer != null) doomer.stop();
         if (active != null) handler.removeCallbacksAndMessages(active);
         if (pending != null) handler.removeCallbacksAndMessages(pending);
         handler.removeCallbacks(hideControls);
