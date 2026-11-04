@@ -1083,8 +1083,8 @@ public class Main extends Activity {
     private String resolve(Sources.Item item) {
         if (Sources.TIKTOK.equals(item.source)) {
             String spoken = Sources.tiktokCaptionLanguage(item.id);
-            igTrace("tiktok caption " + (spoken == null ? "none" : spoken)
-                    + " (" + Sources.lastCaptionNote + ")");
+            igTrace("tiktok " + item.id + " -> " + (spoken == null ? "none" : spoken) + " by "
+                    + Sources.lastTiktokSignal + " (" + Sources.lastCaptionNote + ")");
             if (spoken != null && !Prefs.languages(this).contains(spoken)) {
                 igTrace("skip tiktok caption " + spoken);
                 return null;

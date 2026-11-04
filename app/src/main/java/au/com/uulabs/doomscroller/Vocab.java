@@ -302,10 +302,13 @@ public final class Vocab {
                 latin++;
             }
         }
-        if (kana > 0) {
+        // A few kana or hangul at the end of a long Latin caption are tag
+        // decoration, not the language of the clip; they decide only when they
+        // are a real share of the letters.
+        if (kana > 0 && kana * 4 >= latin) {
             return "ja";
         }
-        if (hangul > 0) {
+        if (hangul > 0 && hangul * 4 >= latin) {
             return "ko";
         }
         if (han > latin * 2) {

@@ -11,8 +11,10 @@ import java.net.URL;
 import java.net.URLEncoder;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -591,32 +593,165 @@ public final class Sources {
     private static final String MOBILE_UA = "Mozilla/5.0 (Linux; Android 15; Pixel 8) "
             + "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Mobile Safari/537.36";
 
+    /** Where the last TikTok verdict came from: asr, caption, country or none. */
+    public static volatile String lastTiktokSignal = "none";
+
+    /**
+     * Three signals, strongest first. TikTok's own speech recognition names
+     * the spoken language when the clip has auto-captions; the caption's
+     * words are next; and when both are silent the country the clip was made
+     * in stands in for the language, which skips some English clips made
+     * abroad but stops far more foreign ones. A clip whose language is not
+     * one the app offers is reported as OTHER so it is never chosen.
+     */
     public static String tiktokCaptionLanguage(String id) {
         lastCaption = "";
+        lastTiktokSignal = "none";
         try {
             String html = getAs("https://www.tiktok.com/@x/video/" + id, UI_MOBILE_UA);
             lastCaptionNote = "bytes=" + html.length();
             // The page escapes its own JSON, so quotes arrive as \" and the
-            // slashes as \/. Normalise first, then read the field directly.
+            // slashes as \/. Normalise first, then read the fields directly.
             String h = html.replace("\\/", "/").replace("\\\"", "\"");
-            int at = h.indexOf("\"desc\":\"");
+            // The clip's own record starts at its id; everything before it is
+            // page furniture (hashtag blurbs, comments) with captions of its own.
+            int anchor = h.indexOf("\"id\":\"" + id + "\"");
+            int at = h.indexOf("\"desc\":\"", anchor < 0 ? 0 : anchor);
             if (at < 0) {
                 lastCaptionNote = "no desc in " + html.length();
-                return null;
+            } else {
+                int from = at + 8;
+                int to = h.indexOf('"', from);
+                if (to > from) {
+                    lastCaption = jsonText(h.substring(from, Math.min(to, from + 400)));
+                }
             }
-            int from = at + 8;
-            int to = h.indexOf('"', from);
-            if (to <= from) {
-                return null;
+            String asr = tiktokAsrLanguage(h, anchor < 0 ? 0 : anchor);
+            if (asr != null) {
+                lastTiktokSignal = "asr";
+                return asr;
             }
-            String caption = h.substring(from, Math.min(to, from + 400));
-            lastCaption = caption;
-            String spoken = Vocab.detect(caption);
-            return spoken != null ? spoken : Vocab.detectLatin(caption);
+            String spoken = Vocab.detect(lastCaption);
+            if (spoken == null) spoken = Vocab.detectLatin(lastCaption);
+            if (spoken != null) {
+                lastTiktokSignal = "caption";
+                return spoken;
+            }
+            String country = tiktokCountryLanguage(h, anchor < 0 ? 0 : anchor);
+            if (country != null) {
+                lastTiktokSignal = "country";
+                return country;
+            }
+            return null;
         } catch (Exception e) {
             lastCaptionNote = "err " + e.getClass().getSimpleName();
             return null;
         }
+    }
+
+    private static final Pattern ASR_ENTRY = Pattern.compile(
+            "\\{[^{}]*\"LanguageCodeName\":\"([A-Za-z]{2,3})[^\"]*\"[^{}]*\"Source\":\"ASR\"[^{}]*\\}");
+
+    /** The language TikTok's speech recognition heard, or null without auto-captions. */
+    static String tiktokAsrLanguage(String h, int anchor) {
+        int at = h.indexOf("\"subtitleInfos\":[", anchor);
+        if (at < 0) return null;
+        int end = h.indexOf("]", at);
+        if (end < 0) return null;
+        Matcher m = ASR_ENTRY.matcher(h.substring(at, end + 1));
+        if (!m.find()) return null;
+        return isoLanguage(m.group(1).toLowerCase(java.util.Locale.ROOT));
+    }
+
+    /** Maps a subtitle language code to an offered language, or OTHER. */
+    static String isoLanguage(String code) {
+        switch (code) {
+            case "eng": case "en": return "en";
+            case "jpn": case "ja": return "ja";
+            case "zho": case "cmn": case "yue": case "zh": return "zh";
+            case "kor": case "ko": return "ko";
+            case "spa": case "es": return "es";
+            case "por": case "pt": return "pt";
+            case "fra": case "fre": case "fr": return "fr";
+            case "deu": case "ger": case "de": return "de";
+            case "ita": case "it": return "it";
+            case "rus": case "ru": return "ru";
+            case "ara": case "ar": return "ar";
+            case "hin": case "hi": return "hi";
+            case "ind": case "id": return "id";
+            case "tur": case "tr": return "tr";
+            case "tha": case "th": return "th";
+            default: return Vocab.OTHER;
+        }
+    }
+
+    /**
+     * The main language of the country a clip was made in, for countries with
+     * one clear language. Mixed or English-speaking countries give null.
+     */
+    static String tiktokCountryLanguage(String h, int anchor) {
+        Matcher m = Pattern.compile("\"locationCreated\":\"([A-Z]{2})\"").matcher(h);
+        if (!m.find(anchor)) return null;
+        return countryLanguage(m.group(1));
+    }
+
+    static String countryLanguage(String cc) {
+        switch (cc) {
+            case "BR": case "PT": case "AO": case "MZ": return "pt";
+            case "ES": case "MX": case "AR": case "CO": case "CL": case "PE": case "VE":
+            case "EC": case "GT": case "CU": case "BO": case "DO": case "HN": case "PY":
+            case "SV": case "NI": case "CR": case "PA": case "UY": return "es";
+            case "IT": return "it";
+            case "FR": case "SN": case "CI": return "fr";
+            case "DE": case "AT": return "de";
+            case "ID": return "id";
+            case "TR": return "tr";
+            case "JP": return "ja";
+            case "KR": return "ko";
+            case "CN": case "TW": case "HK": case "MO": return "zh";
+            case "RU": case "BY": case "KZ": return "ru";
+            case "TH": return "th";
+            case "SA": case "EG": case "AE": case "IQ": case "MA": case "DZ": case "TN":
+            case "JO": case "KW": case "QA": case "OM": case "LB": case "SY": case "YE":
+            case "LY": case "BH": return "ar";
+            // One clear language the app does not offer.
+            case "VN": case "PL": case "NL": case "BE": case "GR": case "IL": case "BD":
+            case "LK": case "NP": case "MM": case "KH": case "LA": case "ET": case "GE":
+            case "AM": case "MN": case "HU": case "CZ": case "SK": case "RO": case "BG":
+            case "UA": case "SE": case "NO": case "DK": case "FI": case "IR": case "AF":
+            case "UZ": case "AZ": case "RS": case "HR": case "SI": case "LT": case "LV":
+            case "EE": case "IS": return Vocab.OTHER;
+            default: return null;   // English-speaking or genuinely mixed
+        }
+    }
+
+    /** Decodes the escapes left in a JSON string once the quotes and slashes are normalised. */
+    static String jsonText(String raw) {
+        StringBuilder out = new StringBuilder(raw.length());
+        for (int i = 0; i < raw.length(); i++) {
+            char c = raw.charAt(i);
+            if (c == '\\' && i + 1 < raw.length()) {
+                char n = raw.charAt(i + 1);
+                if (n == 'u' && i + 5 < raw.length()) {
+                    try {
+                        out.append((char) Integer.parseInt(raw.substring(i + 2, i + 6), 16));
+                        i += 5;
+                        continue;
+                    } catch (NumberFormatException ignored) {
+                    }
+                } else if (n == 'n' || n == 't' || n == 'r') {
+                    out.append(' ');
+                    i++;
+                    continue;
+                } else if (n == '\\' || n == '"' || n == '/') {
+                    out.append(n);
+                    i++;
+                    continue;
+                }
+            }
+            out.append(c);
+        }
+        return out.toString();
     }
 
     private static List<Item> instagram(String word) throws IOException {
@@ -732,6 +867,13 @@ public final class Sources {
             }
             html = getTiktokTag(word);
         }
+        // Each clip's record on the tag page opens with its id and caption.
+        Map<String, String> captions = new HashMap<String, String>();
+        String normalised = html.replace("\\/", "/").replace("\\\"", "\"");
+        Matcher c = Pattern.compile("\"id\":\"(\\d{15,25})\",\"desc\":\"([^\"]{0,400})").matcher(normalised);
+        while (c.find()) {
+            captions.put(c.group(1), jsonText(c.group(2)));
+        }
         Matcher m = Pattern.compile("tiktok\\.com/@[\\w.\\-]+/video/(\\d{15,25})").matcher(html);
         Set<String> seen = new HashSet<String>();
         while (m.find() && out.size() < 12) {
@@ -739,7 +881,8 @@ public final class Sources {
             if (!seen.add(id)) {
                 continue;
             }
-            out.add(new Item(TIKTOK, id, "", "frame",
+            String caption = captions.get(id);
+            out.add(new Item(TIKTOK, id, caption == null ? "" : caption, "frame",
                     "https://www.tiktok.com/player/v1/" + id
                             + "?autoplay=1&loop=0&controls=0&music_info=0&description=0", 0, 0));
         }

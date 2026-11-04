@@ -11,8 +11,8 @@ argued in `research/FINDINGS.md`; what the app is and how it picks is in
 
 ## Where it stands
 
-- Latest published release: 0.1.48 (versionCode 49), at
-  https://github.com/uulabs/Doomscroller/releases/tag/v0.1.48, in two
+- Latest published release: 0.1.49 (versionCode 50), at
+  https://github.com/uulabs/Doomscroller/releases/tag/v0.1.49, in two
   distributions (`selfupdate` and `standard`, the latter never installs anything
   itself). `dist/` holds the built files and `SHA256SUMS`.
 - Sources on by default: YouTube, TikTok, Instagram, Facebook. Opt in: X,
@@ -41,8 +41,10 @@ subjects are drawn from shuffled per-language bags that survive a restart.
 - Every source is an undocumented public surface and can close at any time.
   TikTok throttles the tag endpoint; the Meta search indexes throttle quickly, so
   Instagram and Facebook build up supply over time.
-- Language filtering is best effort: it reads the YouTube title, the TikTok
-  caption, the Instagram caption, and for Facebook the post text, canonical
+- Language filtering is best effort: it reads the YouTube title; for TikTok
+  the speech-recognition subtitle language when the clip has auto-captions,
+  then the caption, then the country it was made in (one-language countries
+  only, so some English clips made abroad are skipped); the Instagram caption, and for Facebook the post text, canonical
   slug and page name from the video plugin, plus the search index's title for
   live-discovered Meta reels. A script none of the fifteen languages uses is a
   clear mismatch. A clip is only rejected when the answer is clear, so a
