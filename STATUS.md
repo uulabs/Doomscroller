@@ -11,8 +11,8 @@ argued in `research/FINDINGS.md`; what the app is and how it picks is in
 
 ## Where it stands
 
-- Latest published release: 0.1.46 (versionCode 47), at
-  https://github.com/uulabs/Doomscroller/releases/tag/v0.1.46, in two
+- Latest published release: 0.1.47 (versionCode 48), at
+  https://github.com/uulabs/Doomscroller/releases/tag/v0.1.47, in two
   distributions (`selfupdate` and `standard`, the latter never installs anything
   itself). `dist/` holds the built files and `SHA256SUMS`.
 - Sources on by default: YouTube, TikTok, Instagram, Facebook. Opt in: X,
@@ -42,8 +42,11 @@ subjects are drawn from shuffled per-language bags that survive a restart.
   TikTok throttles the tag endpoint; the Meta search indexes throttle quickly, so
   Instagram and Facebook build up supply over time.
 - Language filtering is best effort: it reads the YouTube title, the TikTok
-  caption and the Instagram caption, and only rejects a clip when the answer is
-  clear.
+  caption, the Instagram caption, and for Facebook the post text, canonical
+  slug and page name from the video plugin, plus the search index's title for
+  live-discovered Meta reels. A script none of the fifteen languages uses is a
+  clear mismatch. A clip is only rejected when the answer is clear, so a
+  wordless or name-only post still passes.
 - Audio focus, keep-screen-on and resume-on-return arrived in 0.1.46 with only
   a short S98 smoke test. The handover warns that earlier player changes broke
   sound; listen with TikTok enabled before trusting them.

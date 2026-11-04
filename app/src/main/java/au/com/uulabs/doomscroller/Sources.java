@@ -232,6 +232,74 @@ public final class Sources {
         return earliest == Long.MAX_VALUE ? 2000 : Math.max(0, earliest - now);
     }
 
+    /**
+     * What the index called each reel it listed: the post's own text and the
+     * page name, which is the only language signal a reel has before it is
+     * fetched. Keyed by reel id; bounded so a long session cannot grow it.
+     */
+    private static final java.util.Map<String, String> INDEX_TITLES =
+            new java.util.LinkedHashMap<String, String>(256, 0.75f, false) {
+                @Override
+                protected boolean removeEldestEntry(java.util.Map.Entry<String, String> e) {
+                    return size() > 2000;
+                }
+            };
+
+    /** The index's title for a reel, or an empty string. */
+    public static synchronized String indexTitle(String id) {
+        String title = INDEX_TITLES.get(id);
+        return title == null ? "" : title;
+    }
+
+    /**
+     * Pairs every reel link on an index page with the visible text that
+     * follows it. On DuckDuckGo that is the result's title; on Brave the title
+     * sits within a few hundred characters too. Only what Vocab can read with
+     * confidence is ever acted on, so a stray fragment does no harm.
+     */
+    private static synchronized void rememberIndexTitles(String host, CharSequence decoded) {
+        Matcher m = Pattern.compile(Pattern.quote(host) + "/reel/([A-Za-z0-9_-]{5,})").matcher(decoded);
+        while (m.find()) {
+            String id = m.group(1);
+            if (INDEX_TITLES.containsKey(id)) continue;
+            int from = m.end();
+            int to = Math.min(decoded.length(), from + 600);
+            String text = unescapeHtml(decoded.subSequence(from, to).toString()
+                    .replaceAll("<[^>]+>", " ")).replaceAll("\\s+", " ").trim();
+            // The run of text begins after the link's own attributes close.
+            int gt = text.indexOf('>');
+            if (gt >= 0 && gt < 200) text = text.substring(gt + 1).trim();
+            if (text.length() > 160) text = text.substring(0, 160);
+            if (text.length() >= 6) INDEX_TITLES.put(id, text);
+        }
+    }
+
+    /** Enough of HTML's entities to read a caption; anything else is left as is. */
+    static String unescapeHtml(String raw) {
+        if (raw == null || raw.indexOf('&') < 0) return raw == null ? "" : raw;
+        StringBuffer out = new StringBuffer();
+        Matcher m = Pattern.compile("&(#x[0-9A-Fa-f]{1,6}|#[0-9]{1,7}|amp|quot|apos|lt|gt|nbsp);").matcher(raw);
+        while (m.find()) {
+            String e = m.group(1);
+            String r;
+            try {
+                if (e.startsWith("#x")) r = new String(Character.toChars(Integer.parseInt(e.substring(2), 16)));
+                else if (e.startsWith("#")) r = new String(Character.toChars(Integer.parseInt(e.substring(1))));
+                else if (e.equals("amp")) r = "&";
+                else if (e.equals("quot")) r = "\"";
+                else if (e.equals("apos")) r = "'";
+                else if (e.equals("lt")) r = "<";
+                else if (e.equals("gt")) r = ">";
+                else r = " ";
+            } catch (RuntimeException invalid) {
+                r = " ";
+            }
+            m.appendReplacement(out, Matcher.quoteReplacement(r));
+        }
+        m.appendTail(out);
+        return out.toString();
+    }
+
     /** Independent public indexes; never retry a blocked index in a tight loop. */
     private static String reelSearch(String host, String word) throws IOException {
         String query = enc("site:" + host + "/reel " + word);
@@ -250,7 +318,10 @@ public final class Sources {
                     try { decoded.append(' ').append(java.net.URLDecoder.decode(links.group(1), "UTF-8")); }
                     catch (IllegalArgumentException ignored) { }
                 }
-                if (direct.matcher(decoded).find()) return decoded.toString();
+                if (direct.matcher(decoded).find()) {
+                    rememberIndexTitles(host, decoded);
+                    return decoded.toString();
+                }
             } catch (IOException unavailable) {
                 indexBlockedUntil.set(i, now + 10 * 60_000L);
             }
@@ -349,23 +420,45 @@ public final class Sources {
                 }
             }
             if (id != null) {
-                out.add(new Item(FACEBOOK, id, "", "fbprobe", "", 0, 0));
+                out.add(new Item(FACEBOOK, id, indexTitle(id), "fbprobe", "", 0, 0));
             }
         }
         fbAvailable = FB_POOL.size();
         return out;
     }
 
+    /** Language of the reel last passed through facebookMedia(), or null when unclear. */
+    public static volatile String lastFacebookLanguage;
+    /** Page name of that reel; read for language, kept out of the repeat-title check. */
+    public static volatile String lastFacebookOwner = "";
+
     /**
      * Facebook's video plugin carries the mp4 URL in its own markup, so the
-     * stream can be read without a browser at all.
+     * stream can be read without a browser at all. Asked with show_text it
+     * also renders the post's own words, the page name and a canonical link
+     * whose slug is the post text in ASCII; together those are the only
+     * language signal a Facebook reel offers, so they are read on the same
+     * fetch and kept in lastCaption / lastFacebookLanguage.
      */
     public static String facebookMedia(String id) {
+        lastCaption = "";
+        lastFacebookOwner = "";
+        lastFacebookLanguage = null;
+        lastCaptionNote = "";
         try {
             String href = java.net.URLEncoder.encode(
                     "https://www.facebook.com/reel/" + id + "/", "UTF-8");
             String html = get("https://www.facebook.com/plugins/video.php?href="
-                    + href + "&show_text=false", null);
+                    + href + "&show_text=true", null);
+            lastCaption = facebookCaption(html);
+            lastFacebookOwner = facebookOwner(html);
+            String words = (lastCaption + " " + lastFacebookOwner).trim();
+            lastCaptionNote = "bytes=" + html.length() + " caption=" + lastCaption.length()
+                    + " owner=" + lastFacebookOwner.length();
+            if (!words.isEmpty()) {
+                String spoken = Vocab.detect(words);
+                lastFacebookLanguage = spoken != null ? spoken : Vocab.detectLatin(words);
+            }
             Matcher m = Pattern.compile("\"sd_src\":\"([^\"]+)\"")
                     .matcher(html);
             if (m.find()) {
@@ -374,6 +467,31 @@ public final class Sources {
         } catch (Exception ignored) {
         }
         return null;
+    }
+
+    /** The page that posted the reel, as the plugin names it. */
+    static String facebookOwner(String html) {
+        Matcher owner = Pattern.compile("<a title=\"([^\"]{2,120})\"[^>]*ref=embed_video").matcher(html);
+        return owner.find() ? unescapeHtml(owner.group(1)).trim() : "";
+    }
+
+    /** The post's own text, or failing that the canonical slug; empty when the page has neither. */
+    static String facebookCaption(String html) {
+        StringBuilder text = new StringBuilder();
+        Matcher message = Pattern.compile(
+                "data-testid=\"post_message\"[^>]*>(.*?)</div>", Pattern.DOTALL).matcher(html);
+        if (message.find()) {
+            text.append(unescapeHtml(message.group(1).replaceAll("<[^>]+>", " ")));
+        }
+        if (text.length() < 12) {
+            Matcher canonical = Pattern.compile(
+                    "rel=\"canonical\" href=\"[^\"]*/videos/([^/\"]{4,})/[0-9]+/?\"").matcher(html);
+            if (canonical.find()) {
+                text.append(' ').append(canonical.group(1).replace('-', ' '));
+            }
+        }
+        String out = text.toString().replaceAll("\\s+", " ").trim();
+        return out.length() > 400 ? out.substring(0, 400) : out;
     }
 
     /**
@@ -542,7 +660,7 @@ public final class Sources {
                 }
             }
             if (id != null && taken.add(id)) {
-                out.add(new Item(INSTAGRAM, id, "", "igprobe",
+                out.add(new Item(INSTAGRAM, id, indexTitle(id), "igprobe",
                         "https://www.instagram.com/reel/" + id + "/embed/", 0, 0));
             }
         }

@@ -250,6 +250,24 @@ public final class Vocab {
         {"tl", "ang ng mga sa na hindi ito para kaso ako siya"},
     };
 
+    /** Returned by detect() for a script that matches none of the offered languages. */
+    public static final String OTHER = "other";
+
+    /** Letters of scripts the app has no language for; digits and punctuation are not counted. */
+    private static boolean isUnofferedScript(char c) {
+        return (c >= 0x0370 && c <= 0x03FF)      // Greek
+                || (c >= 0x0530 && c <= 0x058F)  // Armenian
+                || (c >= 0x0590 && c <= 0x05FF)  // Hebrew
+                || (c >= 0x0980 && c <= 0x0DFF)  // Bengali through Sinhala
+                || (c >= 0x0E80 && c <= 0x0EFF)  // Lao
+                || (c >= 0x0F00 && c <= 0x0FFF)  // Tibetan
+                || (c >= 0x1000 && c <= 0x109F)  // Myanmar
+                || (c >= 0x10A0 && c <= 0x10FF)  // Georgian
+                || (c >= 0x1200 && c <= 0x137F)  // Ethiopic
+                || (c >= 0x1780 && c <= 0x17FF)  // Khmer
+                || (c >= 0x1800 && c <= 0x18AF); // Mongolian
+    }
+
     /**
      * Best-effort language of a title. Script is decisive where it is
      * unambiguous; for Latin text a small stop-word vote is used, leaving uncertain results
@@ -261,9 +279,12 @@ public final class Vocab {
             return null;
         }
         int kana = 0, hangul = 0, han = 0, arabic = 0, deva = 0, cyr = 0, thai = 0, latin = 0;
+        int other = 0;   // a script none of the offered languages is written in
         for (int i = 0; i < text.length(); i++) {
             char c = text.charAt(i);
-            if (c >= 0x3040 && c <= 0x30FF) {
+            if (isUnofferedScript(c)) {
+                other++;
+            } else if (c >= 0x3040 && c <= 0x30FF) {
                 kana++;
             } else if (c >= 0xAC00 && c <= 0xD7AF) {
                 hangul++;
@@ -306,6 +327,11 @@ public final class Vocab {
         }
         if (thai > latin) {
             return "th";
+        }
+        if (other > latin) {
+            // Bengali, Tamil, Hebrew, Greek and the like: whatever this is, it
+            // cannot be one of the fifteen languages a person can enable.
+            return OTHER;
         }
         if (latin == 0) {
             return null;

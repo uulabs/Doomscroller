@@ -1040,7 +1040,8 @@ public class Main extends Activity {
                 String shownTitle = Sources.YOUTUBE.equals(item.source)
                         ? ytResolver.lastTitle()
                         : (Sources.INSTAGRAM.equals(item.source)
-                        || Sources.TIKTOK.equals(item.source))
+                        || Sources.TIKTOK.equals(item.source)
+                        || Sources.FACEBOOK.equals(item.source))
                         ? Sources.lastCaption : item.title;
                 noteSource(source, true);
                 if (!titleIsNew(shownTitle)) {
@@ -1077,7 +1078,14 @@ public class Main extends Activity {
         }
         if ("fbprobe".equals(item.kind)) {
             String media = Sources.facebookMedia(item.id);
-            igTrace("fb " + item.id + " -> " + (media == null ? "NOMEDIA" : "ok"));
+            String spoken = Sources.lastFacebookLanguage;
+            igTrace("fb " + item.id + " -> " + (media == null ? "NOMEDIA" : "ok")
+                    + " caption " + (spoken == null ? "none" : spoken)
+                    + " (" + Sources.lastCaptionNote + ")");
+            if (spoken != null && !Prefs.languages(this).contains(spoken)) {
+                igTrace("skip fb caption " + spoken);
+                return null;
+            }
             return media;
         }
         if ("igprobe".equals(item.kind)) {
