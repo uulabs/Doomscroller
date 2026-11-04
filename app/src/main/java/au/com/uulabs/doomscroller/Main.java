@@ -64,6 +64,9 @@ public class Main extends Activity {
     /** Raised when the feed has run dry, so it refills faster than it drains. */
     private static final int PREFETCH_STARVING = 6;
     private volatile boolean starving;
+    /** Sources that have been failing, and how long to leave them alone. */
+    private final java.util.Map<String, Long> sourceRest = new java.util.HashMap<String, Long>();
+    private final java.util.Map<String, Integer> sourceStrikes = new java.util.HashMap<String, Integer>();
 
     /** How long a provider-player clip is given before the feed moves on. */
     private static final long PAGE_DWELL_MILLIS = 60000L;
@@ -1027,6 +1030,7 @@ public class Main extends Activity {
                         : (Sources.INSTAGRAM.equals(item.source)
                         || Sources.TIKTOK.equals(item.source))
                         ? Sources.lastCaption : item.title;
+                noteSource(source, true);
                 if (!titleIsNew(shownTitle)) {
                     igTrace("repeat title refused");
                     continue;
@@ -1044,6 +1048,7 @@ public class Main extends Activity {
             remember(item.toString());
         }
         igTrace("produce none " + source);
+        noteSource(source, false);
         return null;
     }
 
@@ -1480,11 +1485,50 @@ public class Main extends Activity {
                 + "}catch(e){window.__uu='ERRX '+e;}})()";
     }
 
+    /**
+     * Records whether a source came back with anything. A source that keeps
+     * failing is rested for a while: hammering it makes throttling worse, which
+     * is what leaves the feed on the loading face.
+     */
+    private synchronized void noteSource(String source, boolean ok) {
+        if (ok) {
+            sourceStrikes.remove(source);
+            return;
+        }
+        int strikes = sourceStrikes.containsKey(source) ? sourceStrikes.get(source) + 1 : 1;
+        sourceStrikes.put(source, strikes);
+        if (strikes >= 3) {
+            long rest = Sources.TIKTOK.equals(source) ? 8L * 60 * 1000 : 4L * 60 * 1000;
+            sourceRest.put(source, System.currentTimeMillis() + rest);
+            sourceStrikes.remove(source);
+            igTrace("resting " + source + " for " + (rest / 60000) + " minutes");
+        }
+    }
+
+    private synchronized boolean resting(String source) {
+        Long until = sourceRest.get(source);
+        if (until == null) {
+            return false;
+        }
+        if (until <= System.currentTimeMillis()) {
+            sourceRest.remove(source);
+            return false;
+        }
+        return true;
+    }
+
     private String pickSource(Set<String> enabled) {
         List<String> options = new ArrayList<String>();
         for (String s : Sources.ALL) {
-            if (enabled.contains(s) && !s.equals(lastSource)) {
+            if (enabled.contains(s) && !s.equals(lastSource) && !resting(s)) {
                 options.add(s);
+            }
+        }
+        if (options.isEmpty()) {
+            for (String s : Sources.ALL) {
+                if (enabled.contains(s) && !s.equals(lastSource)) {
+                    options.add(s);
+                }
             }
         }
         if (options.isEmpty()) {
