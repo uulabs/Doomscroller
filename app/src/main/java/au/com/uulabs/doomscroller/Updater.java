@@ -46,15 +46,17 @@ final class Updater {
         if (!force && now - last < HOUR) {
             return;
         }
-        Prefs.setLastUpdateCheck(activity, now);
         new Thread(new Runnable() {
             @Override
             public void run() {
                 try {
                     JSONObject release = fetch(LATEST);
                     if (release == null) {
-                        return;
+                        return;   // offline: the next launch tries again
                     }
+                    // Stamped only once an answer arrived, so a launch without
+                    // a network does not silence the check for an hour.
+                    Prefs.setLastUpdateCheck(activity, now);
                     final String tag = release.optString("tag_name", "");
                     final String page = release.optString("html_url", "");
                     String latest = tag.startsWith("v") ? tag.substring(1) : tag;
@@ -70,11 +72,12 @@ final class Updater {
                         return;
                     }
                     final String apk = BuildConfig.SELF_UPDATE ? apkUrl(release) : null;
+                    final String sums = BuildConfig.SELF_UPDATE ? assetUrl(release, "SHA256SUMS") : null;
                     final String notes = notes(release.optString("body", ""));
                     activity.runOnUiThread(new Runnable() {
                         @Override
                         public void run() {
-                            offer(activity, latest, page, apk, notes);
+                            offer(activity, latest, page, apk, sums, notes);
                         }
                     });
                 } catch (Exception ignored) {
@@ -124,7 +127,8 @@ final class Updater {
     }
 
     private static void offer(final Activity activity, String version,
-                              final String page, final String apk, final String notes) {
+                              final String page, final String apk, final String sums,
+                              final String notes) {
         if (activity.isFinishing()) {
             return;
         }
@@ -137,7 +141,7 @@ final class Updater {
                     @Override
                     public void run() {
                         if (apk != null) {
-                            downloadAndInstall(activity, apk);
+                            downloadAndInstall(activity, apk, sums, page);
                         } else if (!page.isEmpty()) {
                             activity.startActivity(
                                     new Intent(Intent.ACTION_VIEW, Uri.parse(page)));
@@ -146,31 +150,33 @@ final class Updater {
                 }, "Later");
     }
 
-    /** selfupdate only: fetch the APK and hand it to the system installer. */
-    private static void downloadAndInstall(final Activity activity, final String url) {
+    /**
+     * selfupdate only: fetch the APK, check it against the SHA256SUMS the same
+     * release publishes, and hand it to the system installer. Nothing is
+     * installed that does not match, and a failure is reported rather than
+     * leaving a tapped Download button that did nothing.
+     */
+    private static void downloadAndInstall(final Activity activity, final String url,
+                                           final String sums, final String page) {
         new Thread(new Runnable() {
             @Override
             public void run() {
+                String failure;
                 try {
                     File dir = new File(activity.getCacheDir(), "updates");
                     if (!dir.isDirectory() && !dir.mkdirs()) {
-                        return;
+                        throw new java.io.IOException("no cache directory");
                     }
                     File apk = new File(dir, "doomscroller.apk");
-                    HttpURLConnection c = (HttpURLConnection) new URL(url).openConnection();
-                    c.setConnectTimeout(15000);
-                    c.setReadTimeout(30000);
-                    c.setRequestProperty("Accept", "application/octet-stream");
-                    InputStream in = c.getInputStream();
-                    FileOutputStream out = new FileOutputStream(apk);
-                    byte[] buffer = new byte[16384];
-                    int read;
-                    while ((read = in.read(buffer)) != -1) {
-                        out.write(buffer, 0, read);
+                    String expected = expectedHash(sums, url);
+                    if (expected == null) {
+                        throw new java.io.IOException("no published checksum");
                     }
-                    out.close();
-                    in.close();
-                    c.disconnect();
+                    String actual = download(url, apk);
+                    if (!expected.equalsIgnoreCase(actual)) {
+                        apk.delete();
+                        throw new java.io.IOException("checksum mismatch");
+                    }
                     final Uri uri = androidx.core.content.FileProvider.getUriForFile(
                             activity, activity.getPackageName() + ".updates", apk);
                     activity.runOnUiThread(new Runnable() {
@@ -184,10 +190,109 @@ final class Updater {
                             activity.startActivity(install);
                         }
                     });
-                } catch (Exception ignored) {
+                    return;
+                } catch (Exception e) {
+                    failure = e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage();
                 }
+                final String why = failure;
+                activity.runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        if (activity.isFinishing()) {
+                            return;
+                        }
+                        AppDialog.show(activity, "Update not installed",
+                                "The download could not be completed or verified ("
+                                        + why + "). You can get it from the release page instead.",
+                                page == null || page.isEmpty() ? "OK" : "Open page",
+                                page == null || page.isEmpty() ? null : new Runnable() {
+                                    @Override
+                                    public void run() {
+                                        activity.startActivity(
+                                                new Intent(Intent.ACTION_VIEW, Uri.parse(page)));
+                                    }
+                                }, page == null || page.isEmpty() ? null : "Later");
+                    }
+                });
             }
         }).start();
+    }
+
+    /** Streams the file to disk and returns its SHA-256 as lower-case hex. */
+    private static String download(String url, File target) throws Exception {
+        HttpURLConnection c = (HttpURLConnection) new URL(url).openConnection();
+        c.setConnectTimeout(15000);
+        c.setReadTimeout(30000);
+        c.setRequestProperty("Accept", "application/octet-stream");
+        if (c.getResponseCode() != 200) {
+            throw new java.io.IOException("HTTP " + c.getResponseCode());
+        }
+        java.security.MessageDigest digest = java.security.MessageDigest.getInstance("SHA-256");
+        try (InputStream in = c.getInputStream();
+             FileOutputStream out = new FileOutputStream(target)) {
+            byte[] buffer = new byte[16384];
+            int read;
+            while ((read = in.read(buffer)) != -1) {
+                out.write(buffer, 0, read);
+                digest.update(buffer, 0, read);
+            }
+        } finally {
+            c.disconnect();
+        }
+        StringBuilder hex = new StringBuilder();
+        for (byte b : digest.digest()) {
+            hex.append(String.format("%02x", b));
+        }
+        return hex.toString();
+    }
+
+    /** The hash SHA256SUMS lists for the file the APK URL names, or null. */
+    private static String expectedHash(String sumsUrl, String apkUrl) {
+        if (sumsUrl == null || apkUrl == null) {
+            return null;
+        }
+        String name = apkUrl.substring(apkUrl.lastIndexOf('/') + 1);
+        HttpURLConnection c = null;
+        try {
+            c = (HttpURLConnection) new URL(sumsUrl).openConnection();
+            c.setConnectTimeout(15000);
+            c.setReadTimeout(15000);
+            if (c.getResponseCode() != 200) {
+                return null;
+            }
+            java.io.BufferedReader reader = new java.io.BufferedReader(
+                    new java.io.InputStreamReader(c.getInputStream(), "UTF-8"));
+            String line;
+            while ((line = reader.readLine()) != null) {
+                String[] parts = line.trim().split("\\s+");
+                if (parts.length >= 2 && parts[0].length() == 64
+                        && parts[parts.length - 1].replace("*", "").equals(name)) {
+                    return parts[0];
+                }
+            }
+            return null;
+        } catch (Exception e) {
+            return null;
+        } finally {
+            if (c != null) {
+                c.disconnect();
+            }
+        }
+    }
+
+    /** The download address of the release asset with this exact name, or null. */
+    private static String assetUrl(JSONObject release, String wanted) {
+        JSONArray assets = release.optJSONArray("assets");
+        if (assets == null) {
+            return null;
+        }
+        for (int i = 0; i < assets.length(); i++) {
+            JSONObject asset = assets.optJSONObject(i);
+            if (asset != null && wanted.equals(asset.optString("name", ""))) {
+                return asset.optString("browser_download_url", null);
+            }
+        }
+        return null;
     }
 
     /**

@@ -18,9 +18,6 @@ public final class Prefs {
     private static final String KEY_CONTROLS = "show_controls";
     private static final String KEY_SEEN_IDS = "seen_ids";
     private static final String KEY_BAG = "bag_";
-    private static final String KEY_SOURCES_VERSION = "sources_default_version";
-    /** Bumped whenever the default source set changes and must be applied. */
-    private static final int SOURCES_VERSION = 2;
 
     private Prefs() {
     }
@@ -113,9 +110,8 @@ public final class Prefs {
         if (copy.isEmpty()) {
             copy.add(Sources.YOUTUBE);
         }
-        // An explicit choice is current by definition; never migrate over it.
-        sp(c).edit().putStringSet(KEY_SOURCES, copy)
-                .putInt(KEY_SOURCES_VERSION, SOURCES_VERSION).apply();
+        // An explicit choice is current by definition and is never migrated over.
+        sp(c).edit().putStringSet(KEY_SOURCES, copy).apply();
     }
 
     /**

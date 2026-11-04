@@ -42,10 +42,8 @@ import java.util.List;
 import java.util.Random;
 import java.util.Iterator;
 import java.util.Set;
-import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
 
 /**
  * UU Doomscroller - prototype.
@@ -128,7 +126,6 @@ public class Main extends Activity {
     private float swapDirection = 1f;
     private boolean lastLandscape;
     private GestureDetector gestures;
-    private WebView probe;
     private YoutubeResolver ytResolver;
     private InstagramResolver igResolver;
     // Cold Meta discovery starts broadly; an empty indexed subject broadens the
@@ -246,6 +243,9 @@ public class Main extends Activity {
         igResolver = new InstagramResolver(this);
         root = new FrameLayout(this);
         root.setBackgroundColor(Color.BLACK);
+        // A feed is watched without touching the screen, so the screen must not
+        // dim and lock partway through a clip. PlayerView does not do this itself.
+        root.setKeepScreenOn(true);
         root.setSystemUiVisibility(View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
                 | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
                 | View.SYSTEM_UI_FLAG_LAYOUT_STABLE);
@@ -395,27 +395,8 @@ public class Main extends Activity {
         barParams.rightMargin = dp(20);
         barParams.bottomMargin = dp(44);
         root.addView(controlsBar, barParams);
-        // Keep the bar above the navigation bar rather than underneath it.
-        final FrameLayout.LayoutParams liftParams = barParams;
-        root.setOnApplyWindowInsetsListener(new View.OnApplyWindowInsetsListener() {
-            @Override
-            public android.view.WindowInsets onApplyWindowInsets(View v,
-                                                                 android.view.WindowInsets insets) {
-                int bottom;
-                if (android.os.Build.VERSION.SDK_INT >= 30) {
-                    bottom = insets.getInsets(
-                            android.view.WindowInsets.Type.navigationBars()).bottom;
-                } else {
-                    bottom = insets.getSystemWindowInsetBottom();
-                }
-                liftParams.bottomMargin = dp(44) + bottom;
-                if (controlsBar != null) {
-                    controlsBar.setLayoutParams(liftParams);
-                }
-                return insets;
-            }
-        });
-        root.requestApplyInsets();
+        // The bar is lifted above the navigation bar in applyInsets(); a view
+        // holds one insets listener, so it must not be set here as well.
 
         root.addView(loadingView, match());
         loadingView.setVisibility(View.VISIBLE);
@@ -459,22 +440,46 @@ public class Main extends Activity {
      * from an empty memory and the same videos came back.
      */
     private void markPlayed(String id) {
+        boolean added;
         synchronized (played) {
-            played.add(id);
+            added = played.add(id);
             while (played.size() > 10000) {
                 java.util.Iterator<String> it = played.iterator();
                 it.next();
                 it.remove();
             }
-            StringBuilder csv = new StringBuilder();
-            for (String one : played) {
-                if (csv.length() > 0) {
-                    csv.append(',');
-                }
-                csv.append(one);
+            if (added) {
+                playedDirty = true;
+                playedAdds++;
             }
-            Prefs.setPlayedIds(this, csv.toString());
         }
+        // Serialising ten thousand ids on every swipe, on the main thread, was
+        // a needless stall; the list is written every eighth add and on pause.
+        if (added && playedAdds % 8 == 0) {
+            flushPlayed();
+        }
+    }
+
+    private boolean playedDirty;
+    private int playedAdds;
+
+    private void flushPlayed() {
+        String csv;
+        synchronized (played) {
+            if (!playedDirty) {
+                return;
+            }
+            StringBuilder b = new StringBuilder();
+            for (String one : played) {
+                if (b.length() > 0) {
+                    b.append(',');
+                }
+                b.append(one);
+            }
+            csv = b.toString();
+            playedDirty = false;
+        }
+        Prefs.setPlayedIds(this, csv);
     }
 
     private boolean isPlayed(String id) {
@@ -757,7 +762,7 @@ public class Main extends Activity {
         if (loadingView == null) {
             return;
         }
-        if (show) {
+        if (show && BuildConfig.DEBUG) {
             try {
                 java.io.FileOutputStream f = new java.io.FileOutputStream(
                         new java.io.File(getFilesDir(), "loading.log"), true);
@@ -882,6 +887,13 @@ public class Main extends Activity {
                     FrameLayout.LayoutParams rp = (FrameLayout.LayoutParams) rotateButton.getLayoutParams();
                     rp.rightMargin = dp(14) + right;
                     rotateButton.setLayoutParams(rp);
+                }
+                if (controlsBar != null) {
+                    // Keep the bar above the navigation bar rather than underneath it.
+                    FrameLayout.LayoutParams bp =
+                            (FrameLayout.LayoutParams) controlsBar.getLayoutParams();
+                    bp.bottomMargin = dp(44) + bottom;
+                    controlsBar.setLayoutParams(bp);
                 }
                 placeButtons(top);
                 return insets;
@@ -1145,91 +1157,6 @@ public class Main extends Activity {
         return "frame".equals(item.kind);
     }
 
-    private String resolveYouTube(final String videoId) {
-        final CountDownLatch latch = new CountDownLatch(1);
-        final String[] out = new String[1];
-        handler.post(new Runnable() {
-            @Override
-            public void run() {
-                startProbe(videoId, new Probe() {
-                    @Override
-                    public void onStream(String url) {
-                        out[0] = url;
-                        latch.countDown();
-                    }
-                });
-            }
-        });
-        try {
-            latch.await(30, TimeUnit.SECONDS);
-        } catch (InterruptedException ignored) {
-            Thread.currentThread().interrupt();
-        }
-        return out[0];
-    }
-
-    private interface Probe {
-        void onStream(String url);
-    }
-
-    private void startProbe(final String videoId, final Probe cb) {
-        final WebView w = new WebView(this);
-        WebSettings s = w.getSettings();
-        s.setJavaScriptEnabled(true);
-        s.setUserAgentString("Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                + "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36");
-        w.setWebViewClient(new WebViewClient() {
-            @Override
-            public void onPageFinished(WebView view, String url) {
-                view.postDelayed(new Runnable() {
-                    @Override
-                    public void run() {
-                        view.evaluateJavascript(ytStartJs(videoId), null);
-                        poll(view, 0, cb);
-                    }
-                }, 1000);
-            }
-        });
-        root.addView(w, new FrameLayout.LayoutParams(dp(2), dp(2)));
-        if (probe != null) {
-            root.removeView(probe);
-            probe.destroy();
-        }
-        probe = w;
-        w.loadUrl("https://www.youtube.com/watch?v=" + videoId);
-    }
-
-    private void poll(final WebView view, final int attempt, final Probe cb) {
-        view.evaluateJavascript("(window.__uu||'')", new ValueCallback<String>() {
-            @Override
-            public void onReceiveValue(String raw) {
-                String value = unquote(raw);
-                if (value.startsWith("OK|")) {
-                    String[] parts = value.split("\\|");
-                    dropProbe();
-                    cb.onStream(parts.length > 1 ? parts[1] : null);
-                    return;
-                }
-                if (value.startsWith("NOMUX") || value.startsWith("ERR")) {
-                    dropProbe();
-                    cb.onStream(null);
-                    return;
-                }
-                if (attempt < 20) {
-                    view.postDelayed(new Runnable() {
-                        @Override
-                        public void run() {
-                            poll(view, attempt + 1, cb);
-                        }
-                    }, 700);
-                } else {
-                    dropProbe();
-                    cb.onStream(null);
-                }
-            }
-        });
-    }
-
     /**
      * Some video ids are deleted, private or region-locked, and the provider
      * answers with its own "Video currently unavailable" card. That card never
@@ -1403,15 +1330,6 @@ public class Main extends Activity {
         });
     }
 
-    private void dropProbe() {
-        WebView w = probe;
-        probe = null;
-        if (w != null) {
-            root.removeView(w);
-            w.destroy();
-        }
-    }
-
     private String unquote(String raw) {
         if (raw == null || "null".equals(raw) || raw.length() < 2) {
             return "";
@@ -1424,41 +1342,6 @@ public class Main extends Activity {
     }
 
     /**
-     * Runs inside the video's own page: asks YouTube's player endpoint for the
-     * streams and returns the one muxed MP4. Ads are separate streams injected
-     * by the player, so playing the media directly has none.
-     */
-    /**
-     * Hides the page's social furniture by its own component names, leaving the
-     * player and the video completely alone.
-     *
-     * The outer overlay renderer is NOT hidden: it also holds the video, and
-     * hiding it produces a black screen. Only the inner pieces are taken out -
-     * the channel bar with its subscribe button, the metapanel, the title, and
-     * the action strip that carries like, comment and share.
-     */
-    private static final String CHROME_CSS =
-            "(function(){if(window.__uuH){return;}window.__uuH=1;"
-            + "var st=document.createElement('style');"
-            + "st.textContent='"
-            + ".ytReelPlayerOverlayViewModelMetadataContainer,"
-            + ".ytReelPlayerOverlayViewModelHorizontalContainer,"
-            + ".ytReelPlayerOverlayViewModelMetadataContainerMetapanel,"
-            + "yt-reel-metapanel-view-model,"
-            + "yt-reel-channel-bar-view-model,"
-            + "yt-shorts-video-title-view-model,"
-            + "[class*=\'ReelActionBar\'],[class*=\'ReelPlayerActionBar\'],"
-            + "[class*=\'OverlayViewModelActionContainer\'],"
-            + ".ytp-unmute,.ytp-unmute-button"
-            + "{display:none!important}';"
-            + "document.head.appendChild(st);"
-            + "var tries=0;var t=setInterval(function(){tries++;"
-            + "var u=document.querySelector('.ytp-unmute,.ytp-unmute-button');"
-            + "if(u){u.click();clearInterval(t);}"
-            + "if(tries>12){clearInterval(t);}},600);})()";
-
-    /** Layout census of the player's overlay, for deciding what to hide. */
-    /**
      * Restyles Instagram's embed. Hiding the whole post around the clip was
      * tried and stops it rendering, so this only removes the obvious chrome and
      * leaves the player's own boxes alone.
@@ -1468,45 +1351,6 @@ public class Main extends Activity {
                     + "s.textContent='header,footer,nav{display:none!important}'"
                     + "+'html,body{background:#000!important;margin:0!important}';"
                     + "document.head.appendChild(s);return '1';}catch(e){return '0';}})()";
-
-    private static final String DOM_JS =
-            "(function(){var out=[];try{var els=document.body.getElementsByTagName('*');"
-            + "for(var i=0;i<els.length&&out.length<140;i++){var el=els[i];"
-            + "var r=el.getBoundingClientRect();"
-            + "if(r.width<8||r.height<8)continue;"
-            + "if(r.top>window.innerHeight||r.left>window.innerWidth)continue;"
-            + "var cls='';try{cls=(el.className||'').toString();}catch(e){}"
-            + "var tag=el.tagName.toLowerCase();"
-            + "var hit=/reel|shorts|overlay|action|subscri|engagement|chip|button|like|comment|share/i"
-            + ".test(cls+' '+tag);"
-            + "if(!hit)continue;"
-            + "out.push(tag+' | '+cls.slice(0,80)+' | '+Math.round(r.left)+','+Math.round(r.top)"
-            + "+' '+Math.round(r.width)+'x'+Math.round(r.height));}}catch(e){out.push('ERR '+e);}"
-            + "return out.join('\\n');})()";
-
-    private static String ytStartJs(String videoId) {
-        return "(function(){try{"
-                + "var c=(window.ytcfg&&window.ytcfg.data_)?window.ytcfg.data_:null;"
-                + "if(!c){window.__uu='ERR no-ytcfg';return;}"
-                + "var key=c.INNERTUBE_API_KEY,ctx=c.INNERTUBE_CONTEXT;"
-                + "if(!key||!ctx){window.__uu='ERR no-context';return;}"
-                + "var body=JSON.stringify({context:ctx,videoId:'" + videoId + "'});"
-                + "fetch('/youtubei/v1/player?key='+key,{method:'POST',"
-                + "headers:{'Content-Type':'application/json'},body:body})"
-                + ".then(function(r){return r.json();})"
-                + ".then(function(j){"
-                + "var sd=j.streamingData||{};"
-                + "var f=(sd.formats||[]).concat(sd.adaptiveFormats||[]);"
-                + "var best=null;"
-                + "for(var i=0;i<f.length;i++){var x=f[i];if(!x.url)continue;"
-                + "if((x.mimeType||'').indexOf('video/mp4')!==0)continue;"
-                + "if(!x.audioQuality)continue;"
-                + "if(!best||(x.height||0)>(best.height||0))best=x;}"
-                + "window.__uu=best?('OK|'+best.url):'NOMUX '+f.length;"
-                + "})"
-                + ".catch(function(e){window.__uu='ERR '+e;});"
-                + "}catch(e){window.__uu='ERRX '+e;}})()";
-    }
 
     /**
      * Records whether a source came back with anything. A source that keeps
@@ -1692,35 +1536,6 @@ public class Main extends Activity {
                     if (url != null && url.contains("instagram.com")) {
                         view.evaluateJavascript(INSTAGRAM_STYLE_JS, null);
                     }
-                    // The feed shows a video and two of our buttons, nothing else.
-                    // Their page draws its own overlay on every Short, so it is
-                    // hidden as it loads.
-                    handler.postDelayed(new Runnable() {
-                        @Override
-                        public void run() {
-                            view.evaluateJavascript(DOM_JS, new ValueCallback<String>() {
-                                @Override
-                                public void onReceiveValue(String value) {
-                                    try {
-                                        java.io.FileOutputStream f = new java.io.FileOutputStream(
-                                                new java.io.File(getFilesDir(), "page-dom.txt"));
-                                        f.write(unquote(value).replace("\\n", "\n")
-                                                .getBytes("UTF-8"));
-                                        f.close();
-                                    } catch (Exception ignored) {
-                                    }
-                                }
-                            });
-                        }
-                    }, 4000);
-                    for (int delay : new int[]{300, 1500, 3500}) {
-                        view.postDelayed(new Runnable() {
-                            @Override
-                            public void run() {
-                                view.evaluateJavascript(CHROME_CSS, null);
-                            }
-                        }, delay);
-                    }
                 }
 
                 @Override
@@ -1787,6 +1602,14 @@ public class Main extends Activity {
                         new androidx.media3.exoplayer.source.DefaultMediaSourceFactory(
                                 new androidx.media3.datasource.DefaultDataSource.Factory(
                                         this, http)))
+                // Behave like a media app: take audio focus when a clip plays, so
+                // other apps' music stops, and pause for a call or when headphones
+                // come out instead of carrying on through the speaker.
+                .setAudioAttributes(new androidx.media3.common.AudioAttributes.Builder()
+                        .setUsage(androidx.media3.common.C.USAGE_MEDIA)
+                        .setContentType(androidx.media3.common.C.AUDIO_CONTENT_TYPE_MOVIE)
+                        .build(), true)
+                .setHandleAudioBecomingNoisy(true)
                 .build();
         slot.player.setRepeatMode(Player.REPEAT_MODE_OFF);
         slot.player.setVolume(0f);
@@ -1862,6 +1685,17 @@ public class Main extends Activity {
                     // The feed never stops: a finished clip rolls straight on to
                     // the next one, which is already buffered behind it.
                     next();
+                }
+            }
+
+            @Override
+            public void onPlayWhenReadyChanged(boolean playWhenReady, int reason) {
+                // Recorded so a device run can tell whether a provider page took
+                // the focus from the clip on screen.
+                if (!playWhenReady && reason
+                        == Player.PLAY_WHEN_READY_CHANGE_REASON_AUDIO_FOCUS_LOSS) {
+                    igTrace("audio focus lost src=" + created.item.source
+                            + (active == created ? " (active)" : ""));
                 }
             }
 
@@ -2560,7 +2394,9 @@ public class Main extends Activity {
             return "https://www.facebook.com/reel/" + item.id + "/";
         }
         if (Sources.TIKTOK.equals(item.source)) {
-            return "https://www.tiktok.com/player/v1/" + item.id;
+            // The handle is unknown here; TikTok serves any handle for a known
+            // video id, which is what the caption lookup already relies on.
+            return "https://www.tiktok.com/@x/video/" + item.id;
         }
         if (Sources.PEERTUBE.equals(item.source)) {
             // The stream URL carries the instance; its watch page is what a
@@ -2719,6 +2555,21 @@ public class Main extends Activity {
         }
         // Leaving the app is the natural point to write down what has been shown.
         flushSeen();
+        flushPlayed();
+    }
+
+    /**
+     * Coming back resumes the clip that was on screen, unless the person had
+     * paused it themselves. Without this every return left a frozen frame that
+     * had to be tapped back into motion.
+     */
+    @Override
+    protected void onResume() {
+        super.onResume();
+        if (active != null && active.player != null && !paused && !gateOpen
+                && settingsPanel == null && !active.rejected && portraitVerified(active)) {
+            active.player.play();
+        }
     }
 
     @Override
@@ -2744,7 +2595,6 @@ public class Main extends Activity {
         if (pending != null && pending.player != null) {
             pending.player.release();
         }
-        dropProbe();
         if (ytResolver != null) {
             ytResolver.destroy();
             ytResolver = null;

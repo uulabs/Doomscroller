@@ -67,6 +67,9 @@ public class YoutubeResolver {
     private final Activity host;
 
     private void trace(String line) {
+        if (!BuildConfig.DEBUG) {
+            return;   // a release build must not grow a log file forever
+        }
         try {
             java.io.FileOutputStream f = new java.io.FileOutputStream(
                     new java.io.File(host.getFilesDir(), "resolve.log"), true);
@@ -277,7 +280,11 @@ public class YoutubeResolver {
     private Reply perform(JSONObject request) {
         HttpURLConnection connection = null;
         try {
-            connection = (HttpURLConnection) new URL(request.optString("url")).openConnection();
+            String url = request.optString("url");
+            if (!url.startsWith("https://")) {
+                return null;   // the page's only network route is HTTPS
+            }
+            connection = (HttpURLConnection) new URL(url).openConnection();
             connection.setConnectTimeout(15000);
             connection.setReadTimeout(20000);
             connection.setInstanceFollowRedirects(true);
