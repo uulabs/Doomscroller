@@ -623,7 +623,7 @@ public final class Sources {
             }
             out.add(new Item(TIKTOK, id, "", "frame",
                     "https://www.tiktok.com/player/v1/" + id
-                            + "?autoplay=1&loop=0&controls=0&music_info=1&description=1", 0, 0));
+                            + "?autoplay=1&loop=0&controls=0&music_info=0&description=0", 0, 0));
         }
         // No sitemap fallback: that list is a fixed set of a few hundred videos,
         // so using it when the tag pages are throttled turns an endless feed into
@@ -656,7 +656,7 @@ public final class Sources {
             }
             out.add(new Item(TIKTOK, id, "", "frame",
                     "https://www.tiktok.com/player/v1/" + id
-                            + "?autoplay=1&loop=0&controls=0&music_info=1&description=1", 0, 0));
+                            + "?autoplay=1&loop=0&controls=0&music_info=0&description=0", 0, 0));
         }
         Collections.shuffle(out, PICK);
         return out;

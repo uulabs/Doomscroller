@@ -1248,7 +1248,6 @@ public class Main extends Activity {
                     + "var t=b.toLowerCase();"
                     + "if(t.indexOf('currently unavailable')>=0"
                     + "||t.indexOf('video unavailable')>=0)return 'GONE';"
-                    + "if(t.indexOf('more videos on tiktok')>=0)return 'END';"
                     // A reel that has been deleted since the index saw it says so.
                     + "if(t.indexOf('may be broken')>=0"
                     + "||t.indexOf('post may have been removed')>=0)return 'GONE';"
@@ -1278,6 +1277,15 @@ public class Main extends Activity {
                     + "if(buffering&&stalled>20000)return 'END';"
                     + "return '';}catch(e){return '';}})()";
 
+    /** One-shot description of the page player, for diagnosing a frozen clip. */
+    private static final String PAGE_STATE_JS =
+            "(function(){try{var v=document.querySelector('video');"
+                    + "if(!v)return 'novideo';"
+                    + "return 'paused='+v.paused+' rs='+v.readyState+' t='+v.currentTime"
+                    + "+' dur='+v.duration+' muted='+v.muted+' err='+(v.error?v.error.code:'none')"
+                    + "+' net='+(v.networkState);"
+                    + "}catch(e){return 'err '+e;}})()";
+
     private boolean ownsPage(WebView view) {
         if (destroyed) return false;
         return (active != null && active.web == view && !active.rejected)
@@ -1289,10 +1297,25 @@ public class Main extends Activity {
         if (attempt > 600) {
             return;
         }
+        if (attempt == 10 || attempt == 30) {
+            view.evaluateJavascript(PAGE_STATE_JS, new ValueCallback<String>() {
+                @Override
+                public void onReceiveValue(String state) {
+                    igTrace("page state " + (pending != null && pending.web == view
+                            ? pending.item.source : active == null ? "?" : active.item.source)
+                            + " " + state);
+                }
+            });
+        }
         view.evaluateJavascript(WATCH_JS, new ValueCallback<String>() {
             @Override
             public void onReceiveValue(String value) {
                 if (!ownsPage(view)) return;
+                if (value != null && value.contains("END")) {
+                    igTrace("page end " + (pending != null && pending.web == view
+                            ? pending.item.source : active == null ? "?" : active.item.source)
+                            + " " + value.replace("\"", ""));
+                }
                 boolean gone = value != null && value.contains("GONE");
                 boolean ended = value != null && value.contains("END");
                 // A player whose playhead cannot be seen gets a bounded grace
