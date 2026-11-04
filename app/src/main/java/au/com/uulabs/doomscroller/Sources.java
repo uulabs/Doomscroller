@@ -615,10 +615,11 @@ public final class Sources {
                     "https://www.tiktok.com/player/v1/" + id
                             + "?autoplay=1&loop=0&controls=0&music_info=1&description=1", 0, 0));
         }
-        if (!out.isEmpty()) {
-            return out;
-        }
-        return tiktokSitemap();
+        // No sitemap fallback: that list is a fixed set of a few hundred videos,
+        // so using it when the tag pages are throttled turns an endless feed into
+        // a loop over the same small pool. Returning nothing marks the source as
+        // failing, which rests it and lets the feed carry on elsewhere.
+        return out;
     }
 
     /** The sitemap is the stable one: it enumerates video URLs directly. */
