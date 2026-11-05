@@ -11,8 +11,8 @@ argued in `research/FINDINGS.md`; what the app is and how it picks is in
 
 ## Where it stands
 
-- Latest published release: 0.1.49 (versionCode 50), at
-  https://github.com/uulabs/Doomscroller/releases/tag/v0.1.49, in two
+- Latest published release: 0.1.50 (versionCode 51), at
+  https://github.com/uulabs/Doomscroller/releases/tag/v0.1.50, in two
   distributions (`selfupdate` and `standard`, the latter never installs anything
   itself). `dist/` holds the built files and `SHA256SUMS`.
 - Sources on by default: YouTube, TikTok, Instagram, Facebook. Opt in: X,

@@ -757,10 +757,60 @@ public class Main extends Activity {
                     if (settled != (loadingView.getVisibility() == View.VISIBLE)) {
                         setLoading(settled);
                     }
+                    if (blank && blankSince != 0 && stuckActive()) {
+                        long waited = now - blankSince;
+                        if (waited > STUCK_ADVANCE_MILLIS && portraitVerified(pending)
+                                && pendingReady()) {
+                            // The clip on screen has never shown a frame but
+                            // the next one is ready: roll on as a swipe would.
+                            igTrace("stuck active " + active.item.source + " after "
+                                    + waited + "ms, advancing to " + pending.item.source);
+                            setStatus("skipped: stuck");
+                            blankSince = now;
+                            next();
+                        } else if (waited > STUCK_DROP_MILLIS) {
+                            // Nothing ready yet either: give the dead clip up so
+                            // the next verified one is promoted on arrival.
+                            igTrace("stuck active " + active.item.source + " after "
+                                    + waited + "ms, dropping");
+                            setStatus("skipped: stuck");
+                            blankSince = now;
+                            disposeActiveAndAdvance(active);
+                        }
+                    }
                 }
                 handler.postDelayed(this, 400);
             }
         }, 400);
+    }
+
+    /** How long the face may sit on a clip that has not shown a frame while another is ready. */
+    private static final long STUCK_ADVANCE_MILLIS = 8000;
+    /** How long before such a clip is given up even with nothing ready behind it. */
+    private static final long STUCK_DROP_MILLIS = 25000;
+
+    /**
+     * True when the clip on screen is the reason the face is showing: it is in
+     * place, not already leaving or rejected, and nobody has paused the feed.
+     * A swipe already rescues this state; the watchdog does the same by itself.
+     */
+    private boolean stuckActive() {
+        if (active == null || active.rejected || active.rendered || paused
+                || gateOpen || settingsPanel != null) {
+            return false;
+        }
+        return active.rootView == null || Math.abs(active.rootView.getTranslationY()) <= 1f;
+    }
+
+    /** True when the buffered clip could be shown this instant. */
+    private boolean pendingReady() {
+        if (pending == null || pending.rejected) {
+            return false;
+        }
+        if (pending.player != null) {
+            return pending.player.getPlaybackState() == Player.STATE_READY;
+        }
+        return pending.web != null && pending.sizeKnown;
     }
 
     private void setLoading(boolean show) {
