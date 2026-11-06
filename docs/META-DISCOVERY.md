@@ -1,6 +1,6 @@
 # Meta discovery and maintenance
 
-Instagram and Facebook use a bundled cache of public reel permalinks to start without a search engine accepting every device request. This is the same path in release and debug builds. Automatic debug-only seed clips have been removed.
+Instagram and Facebook carry a bundled cache of public reel permalinks so a phone the search engines refuse still has a feed. Since 0.1.52 it is a fallback only: every pass first searches the public indexes live for the random subject drawn, and the cache is drawn from only while nothing live is waiting (every index refused or answered empty). Up to 0.1.51 the cache was drawn first, which made those two sources random within a fixed list rather than across the web. This is the same path in release and debug builds. Automatic debug-only seed clips have been removed.
 
 The current cache contains 6,000 Instagram and 2,181 Facebook IDs. It was sampled from public Internet Archive CDX index pages across index bands, deduplicated and shuffled. `meta-catalog-receipt.json` records source requests, response hashes, sampling seed, errors and the resulting asset hash. Facebook sampling stopped after a TLS timeout; its coverage is narrower than the intended 24 bands. This is a finite, biased sample of indexed public URLs, not uniform access to all Meta videos.
 

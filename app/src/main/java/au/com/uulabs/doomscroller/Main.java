@@ -1180,7 +1180,7 @@ public class Main extends Activity {
         }
         lastSource = source;
         igTrace("candidates " + source + " " + candidates.size()
-                + " word=" + word);
+                + " word=" + word + " " + Sources.supplyAudit());
         List<Sources.Item> filtered = filter(candidates);
         for (Sources.Item item : filtered) {
             String url = resolve(item);

@@ -108,10 +108,59 @@ public final class Sources {
             }
             List<String> f = new ArrayList<>(facebook), i = new ArrayList<>(instagram), p = new ArrayList<>(x);
             Collections.shuffle(f, PICK); Collections.shuffle(i, PICK); Collections.shuffle(p, PICK);
-            FB_POOL.addAll(f); IG_POOL.addAll(i);
-            synchronized (X_POOL) { X_POOL.addAll(p); xAvailable = X_POOL.size(); }
-            fbAvailable = FB_POOL.size(); igAvailable = IG_POOL.size();
+            FB.seed(f); IG.seed(i); XS.seed(p);
             reelCacheLoaded = true;
+        }
+    }
+
+    /**
+     * What a search-backed source has to hand: reels or posts found live for
+     * the subjects drawn this session, and behind them the bundled list. The
+     * live set is always drawn first, so the feed is as random as the web
+     * allows; the list is reached only when every index has refused or come
+     * back empty, so a phone the search engines turn away still has a feed.
+     */
+    static final class Supply {
+        final java.util.ArrayDeque<String> live = new java.util.ArrayDeque<String>();
+        final java.util.ArrayDeque<String> list = new java.util.ArrayDeque<String>();
+        final Set<String> known = new HashSet<String>();
+        volatile int available;
+        volatile long freshAt;
+        volatile long blockedUntil;
+        /** How many were handed out from each side, for the audit trail. */
+        volatile int servedLive;
+        volatile int servedList;
+
+        synchronized void seed(java.util.Collection<String> ids) {
+            for (String id : ids) if (known.add(id)) list.addLast(id);
+            available = live.size() + list.size();
+        }
+
+        synchronized int addLive(java.util.Collection<String> ids) {
+            int added = 0;
+            for (String id : ids) if (known.add(id)) { live.addLast(id); added++; }
+            available = live.size() + list.size();
+            return added;
+        }
+
+        synchronized boolean liveEmpty() { return live.isEmpty(); }
+
+        /** Live first; the bundled list only when nothing live is waiting. */
+        synchronized List<String> draw(int n) {
+            List<String> out = new ArrayList<String>();
+            while (out.size() < n) {
+                java.util.ArrayDeque<String> from = live.isEmpty() ? list : live;
+                if (from.isEmpty()) break;
+                int skip = PICK.nextInt(from.size());
+                java.util.Iterator<String> it = from.iterator();
+                for (int k = 0; it.hasNext(); k++) {
+                    String candidate = it.next();
+                    if (k == skip) { out.add(candidate); it.remove(); break; }
+                }
+                if (from == live) servedLive++; else servedList++;
+            }
+            available = live.size() + list.size();
+            return out;
         }
     }
 
@@ -246,14 +295,14 @@ public final class Sources {
         for (String source : enabled) {
             long readyAt;
             if (FACEBOOK.equals(source)) {
-                if (fbAvailable > 0) return 0;
-                readyAt = Math.max(fbBlockedUntil, fbFreshAt + 5000L);
+                if (FB.available > 0) return 0;
+                readyAt = Math.max(FB.blockedUntil, FB.freshAt + 5000L);
             } else if (INSTAGRAM.equals(source)) {
-                if (igAvailable > 0) return 0;
-                readyAt = Math.max(igBlockedUntil, igFreshAt + 5000L);
+                if (IG.available > 0) return 0;
+                readyAt = Math.max(IG.blockedUntil, IG.freshAt + 5000L);
             } else if (X.equals(source)) {
-                if (xAvailable > 0) return 0;
-                readyAt = Math.max(xBlockedUntil, xFreshAt + 5000L);
+                if (XS.available > 0) return 0;
+                readyAt = Math.max(XS.blockedUntil, XS.freshAt + 5000L);
                 // X has no archive fallback: with both indexes blocked it waits for them.
                 readyAt = Math.max(readyAt, Math.min(indexBlockedUntil.get(0), indexBlockedUntil.get(1)));
                 earliest = Math.min(earliest, readyAt);
@@ -413,55 +462,47 @@ public final class Sources {
 
     // -------------------------------------------------------------- facebook
 
-    private static final java.util.ArrayDeque<String> FB_POOL =
-            new java.util.ArrayDeque<String>();
-    private static volatile int fbAvailable;
-    private static volatile long fbFreshAt;
-    private static volatile long fbBlockedUntil;
+    static final Supply FB = new Supply();
 
-    /** Reels found the same way as Instagram's: permalinks from a search index. */
+    /**
+     * Reels found the same way as Instagram's: permalinks from a search index
+     * for the subject drawn, searched afresh whenever nothing live is waiting.
+     */
     private static List<Item> facebook(String word) throws IOException {
-        long now = System.currentTimeMillis();
-        if (FB_POOL.isEmpty() && now > fbBlockedUntil && now - fbFreshAt > 5000L) {
-            fbFreshAt = now;
-            try {
-                String html = reelSearch("facebook.com", word);
-                Matcher m = Pattern.compile("facebook\\.com/reel/([0-9]{6,})")
-                        .matcher(html);
-                Set<String> seen = new HashSet<String>();
-                while (m.find()) {
-                    if (seen.add(m.group(1))) {
-                        FB_POOL.addLast(m.group(1));
-                    }
-                }
-                if (FB_POOL.isEmpty()) {
-                    fbBlockedUntil = now + 5000L;
-                }
-            } catch (IOException e) {
-                fbBlockedUntil = now + 10 * 60_000L;
-            }
-        }
+        searchReels(FB, "facebook.com", word, Pattern.compile("facebook\\.com/reel/([0-9]{6,})"));
         List<Item> out = new ArrayList<Item>();
-        java.util.Random random = new java.util.Random();
-        // produce() consumes one resolved item; retain the other pooled links.
-        for (int i = 0; i < 1 && !FB_POOL.isEmpty(); i++) {
-            int skip = random.nextInt(FB_POOL.size());
-            String id = null;
-            java.util.Iterator<String> it = FB_POOL.iterator();
-            for (int k = 0; it.hasNext(); k++) {
-                String candidate = it.next();
-                if (k == skip) {
-                    id = candidate;
-                    it.remove();
-                    break;
-                }
-            }
-            if (id != null) {
-                out.add(new Item(FACEBOOK, id, indexTitle(id), "fbprobe", "", 0, 0));
-            }
+        // produce() consumes one resolved item; retain the other links.
+        for (String id : FB.draw(1)) {
+            out.add(new Item(FACEBOOK, id, indexTitle(id), "fbprobe", "", 0, 0));
         }
-        fbAvailable = FB_POOL.size();
         return out;
+    }
+
+    /**
+     * One live search per subject while nothing live is waiting, paced so a
+     * refused index is not hammered. Failure or an empty answer blocks only the
+     * search; drawing then falls through to the bundled list.
+     */
+    private static void searchReels(Supply supply, String host, String word, Pattern link) {
+        long now = System.currentTimeMillis();
+        if (!supply.liveEmpty() || now <= supply.blockedUntil || now - supply.freshAt <= 5000L) {
+            return;
+        }
+        supply.freshAt = now;
+        try {
+            String html = reelSearch(host, word);
+            Matcher m = link.matcher(html);
+            List<String> found = new ArrayList<String>();
+            while (m.find()) found.add(m.group(1));
+            int added = supply.addLive(found);
+            note(host + " live search for " + word + ": " + found.size() + " links, " + added + " new");
+            if (added == 0) {
+                supply.blockedUntil = now + 5000L;
+            }
+        } catch (IOException e) {
+            note(host + " live search failed: " + e);
+            supply.blockedUntil = now + 10 * 60_000L;
+        }
     }
 
     /** Language of the reel last passed through facebookMedia(), or null when unclear. */
@@ -579,11 +620,7 @@ public final class Sources {
      * throttles quickly, and each candidate is a usable clip for a while, so a
      * pool of a few dozen keeps the feed supplied long after one request.
      */
-    private static final java.util.ArrayDeque<String> IG_POOL =
-            new java.util.ArrayDeque<String>();
-    private static volatile int igAvailable;
-    private static volatile long igFreshAt;
-    private static volatile long igBlockedUntil;
+    static final Supply IG = new Supply();
 
     /**
      * Instagram's public oEmbed returns the reel's caption, which is the only
@@ -818,51 +855,13 @@ public final class Sources {
     }
 
     private static List<Item> instagram(String word) throws IOException {
-        long now = System.currentTimeMillis();
-        if (IG_POOL.isEmpty() && now > igBlockedUntil
-                && now - igFreshAt > 5000L) {
-            igFreshAt = now;
-            try {
-                String html = reelSearch("instagram.com", word);
-                Matcher m = Pattern.compile("instagram\\.com/reel/([A-Za-z0-9_-]{5,})")
-                        .matcher(html);
-                Set<String> seen = new HashSet<String>();
-                while (m.find()) {
-                    String id = m.group(1);
-                    if (seen.add(id)) {
-                        IG_POOL.addLast(id);
-                    }
-                }
-                if (IG_POOL.isEmpty()) {
-                    // Throttled or nothing indexed for this subject: rest a while.
-                    igBlockedUntil = now + 5000L;
-                }
-            } catch (IOException e) {
-                igBlockedUntil = now + 10 * 60_000L;
-            }
-        }
+        searchReels(IG, "instagram.com", word, Pattern.compile("instagram\\.com/reel/([A-Za-z0-9_-]{5,})"));
         List<Item> out = new ArrayList<Item>();
-        Set<String> taken = new HashSet<String>();
-        java.util.Random random = new java.util.Random();
-        // Do not discard five unused discoveries after one successful resolution.
-        for (int i = 0; i < 1 && !IG_POOL.isEmpty(); i++) {
-            int skip = random.nextInt(IG_POOL.size());
-            String id = null;
-            java.util.Iterator<String> it = IG_POOL.iterator();
-            for (int k = 0; it.hasNext(); k++) {
-                String candidate = it.next();
-                if (k == skip) {
-                    id = candidate;
-                    it.remove();
-                    break;
-                }
-            }
-            if (id != null && taken.add(id)) {
-                out.add(new Item(INSTAGRAM, id, indexTitle(id), "igprobe",
-                        "https://www.instagram.com/reel/" + id + "/embed/", 0, 0));
-            }
+        // One resolved item per pass; the other live links wait their turn.
+        for (String id : IG.draw(1)) {
+            out.add(new Item(INSTAGRAM, id, indexTitle(id), "igprobe",
+                    "https://www.instagram.com/reel/" + id + "/embed/", 0, 0));
         }
-        igAvailable = IG_POOL.size();
         return out;
     }
 
@@ -996,59 +995,43 @@ public final class Sources {
      * read from the syndication post endpoint, which still answers with the
      * post's text, language and mp4 renditions.
      */
-    private static final java.util.ArrayDeque<String> X_POOL = new java.util.ArrayDeque<String>();
-    private static volatile long xFreshAt;
-    private static volatile long xBlockedUntil;
-    private static volatile int xAvailable;
+    static final Supply XS = new Supply();
     private static final Pattern STATUS_LINK = Pattern.compile(
             "(?:x|twitter)\\.com/([A-Za-z0-9_]{1,15})/status/([0-9]{15,20})");
 
     private static List<Item> x(String word) throws IOException {
         long now = System.currentTimeMillis();
-        synchronized (X_POOL) {
-            if (X_POOL.isEmpty() && now > xBlockedUntil && now - xFreshAt > 5000L) {
-                xFreshAt = now;
-                try {
-                    String html = statusSearch(word);
-                    Matcher m = STATUS_LINK.matcher(html);
-                    Set<String> seen = new HashSet<String>();
-                    while (m.find()) {
-                        if (seen.add(m.group(2))) {
-                            X_POOL.addLast(m.group(2));
-                        }
-                    }
-                    if (X_POOL.isEmpty()) {
-                        xBlockedUntil = now + 5000L;
-                    }
-                } catch (IOException e) {
-                    note("x search failed: " + e);
-                    xBlockedUntil = now + 10 * 60_000L;
+        if (XS.liveEmpty() && now > XS.blockedUntil && now - XS.freshAt > 5000L) {
+            XS.freshAt = now;
+            try {
+                String html = statusSearch(word);
+                Matcher m = STATUS_LINK.matcher(html);
+                List<String> found = new ArrayList<String>();
+                while (m.find()) found.add(m.group(2));
+                int added = XS.addLive(found);
+                note("x live search for " + word + ": " + found.size() + " links, " + added + " new");
+                if (added == 0) {
+                    XS.blockedUntil = now + 5000L;
                 }
-                note("x pool " + X_POOL.size() + " after search for " + word);
+            } catch (IOException e) {
+                note("x search failed: " + e);
+                XS.blockedUntil = now + 10 * 60_000L;
             }
-            xAvailable = X_POOL.size();
-            List<Item> out = new ArrayList<Item>();
-            // Reading a post is one small JSON fetch, and only some posts carry a
-            // video, so several are handed over at once; the rest stay pooled.
-            for (int i = 0; i < 5 && !X_POOL.isEmpty(); i++) {
-                int skip = PICK.nextInt(X_POOL.size());
-                String id = null;
-                java.util.Iterator<String> it = X_POOL.iterator();
-                for (int k = 0; it.hasNext(); k++) {
-                    String candidate = it.next();
-                    if (k == skip) {
-                        id = candidate;
-                        it.remove();
-                        break;
-                    }
-                }
-                if (id != null) {
-                    out.add(new Item(X, id, indexTitle(id), "xprobe", "", 0, 0));
-                }
-            }
-            xAvailable = X_POOL.size();
-            return out;
         }
+        List<Item> out = new ArrayList<Item>();
+        // Reading a post is one small JSON fetch, and only some posts carry a
+        // video, so several are handed over at once; the rest wait their turn.
+        for (String id : XS.draw(5)) {
+            out.add(new Item(X, id, indexTitle(id), "xprobe", "", 0, 0));
+        }
+        return out;
+    }
+
+    /** How many Instagram, Facebook and X clips came from live search versus the bundled list. */
+    public static String supplyAudit() {
+        return "live/list ig=" + IG.servedLive + "/" + IG.servedList
+                + " fb=" + FB.servedLive + "/" + FB.servedList
+                + " x=" + XS.servedLive + "/" + XS.servedList;
     }
 
     /** Search results naming posts on X about the subject, with their snippets. */

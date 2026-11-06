@@ -11,8 +11,8 @@ argued in `research/FINDINGS.md`; what the app is and how it picks is in
 
 ## Where it stands
 
-- Latest published release: 0.1.51 (versionCode 52), at
-  https://github.com/uulabs/Doomscroller/releases/tag/v0.1.51, in two
+- Latest published release: 0.1.52 (versionCode 53), at
+  https://github.com/uulabs/Doomscroller/releases/tag/v0.1.52, in two
   distributions (`selfupdate` and `standard`, the latter never installs anything
   itself). `dist/` holds the built files and `SHA256SUMS`.
 - Sources on by default: YouTube, TikTok, Instagram, Facebook. Opt in: X,
@@ -26,9 +26,9 @@ argued in `research/FINDINGS.md`; what the app is and how it picks is in
 | --- | --- | --- |
 | YouTube | search results page (Shorts filter unless landscape is allowed) | muxed MP4 resolved by `youtubei.js` in a hidden WebView, played by ExoPlayer |
 | TikTok | tag embed pages | TikTok's `player/v1` embed in a WebView, watched by `WATCH_JS` |
-| Instagram | bundled URL cache, then public search indexes | media URL read from the embed page, played by ExoPlayer |
-| Facebook | bundled URL cache, then public search indexes | mp4 read from the video plugin, played by ExoPlayer |
-| X | bundled post cache, then public search indexes; each post read from the syndication post JSON (text, language, renditions) | direct mp4 (opt in) |
+| Instagram | live search of public indexes for the drawn subject; bundled list only while the indexes refuse | media URL read from the embed page, played by ExoPlayer |
+| Facebook | live search of public indexes for the drawn subject; bundled list only while the indexes refuse | mp4 read from the video plugin, played by ExoPlayer |
+| X | live search of public indexes for the drawn subject; bundled list (none shipped yet) only while they refuse; each post read from the syndication post JSON (text, language, renditions) | direct mp4 (opt in) |
 | PeerTube | Sepia Search + instance lookup | mp4 or HLS (opt in; rarely portrait) |
 
 Two slots are kept: one on screen, one prefetched. Portrait is decided from the
@@ -39,8 +39,12 @@ subjects are drawn from shuffled per-language bags that survive a restart.
 ## Known limits
 
 - Every source is an undocumented public surface and can close at any time.
-  TikTok throttles the tag endpoint; the Meta search indexes throttle quickly, so
-  Instagram and Facebook build up supply over time.
+  TikTok throttles the tag endpoint; the search indexes throttle quickly. Up to
+  0.1.51 Instagram and Facebook drew from the bundled list first and only
+  searched live once it ran out, so those two sources were random within a
+  fixed list of about 8,000 reels rather than across the web. Since 0.1.52 the
+  live search for the drawn subject comes first and the list is reached only
+  while every index refuses or answers empty.
 - Language filtering is best effort: it reads the YouTube title; for TikTok
   the speech-recognition subtitle language when the clip has auto-captions,
   then the caption, then the creator's own name and bio, then the country it

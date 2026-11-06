@@ -121,8 +121,10 @@ final class SettingsUi {
         column.addView(about);
 
         // ---- sources
-        column.addView(sectionLabel(context, "Sources", "Only a source with a working "
-                + "feed can be switched on"));
+        column.addView(sectionLabel(context, "Sources", "Each clip is found live for a "
+                + "random subject. When the search engines refuse the phone, Instagram, "
+                + "Facebook and X fall back to a bundled list of public clips until "
+                + "they answer again"));
         final Set<String> enabled = Prefs.sources(context);
         LinearLayout sourceCard = card(context);
         int j = 0;
