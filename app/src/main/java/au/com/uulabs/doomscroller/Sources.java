@@ -38,6 +38,14 @@ public final class Sources {
 
     private static final java.util.Random PICK = new java.util.Random();
 
+    /** Where discovery reports what it did; null outside trace builds. */
+    public static volatile java.util.function.Consumer<String> trace;
+
+    private static void note(String line) {
+        java.util.function.Consumer<String> t = trace;
+        if (t != null) t.accept(line);
+    }
+
     /** Called once at startup so two installs sample different parts of a list. */
     public static void setSalt(long salt) {
         PICK.setSeed(salt ^ System.nanoTime());
@@ -86,7 +94,7 @@ public final class Sources {
         try (java.io.BufferedReader reader = new java.io.BufferedReader(
                 new java.io.InputStreamReader(input, "UTF-8"))) {
             if (reelCacheLoaded) return;
-            Set<String> facebook = new HashSet<>(), instagram = new HashSet<>();
+            Set<String> facebook = new HashSet<>(), instagram = new HashSet<>(), x = new HashSet<>();
             String line;
             int rows = 0;
             while ((line = reader.readLine()) != null && rows < 20000) {
@@ -95,11 +103,13 @@ public final class Sources {
                 if (fields.length != 2) continue;
                 if (FACEBOOK.equals(fields[0]) && fields[1].matches("[0-9]{6,}")) facebook.add(fields[1]);
                 else if (INSTAGRAM.equals(fields[0]) && fields[1].matches("[A-Za-z0-9_-]{5,}")) instagram.add(fields[1]);
+                else if (X.equals(fields[0]) && fields[1].matches("[0-9]{15,20}")) x.add(fields[1]);
                 rows++;
             }
-            List<String> f = new ArrayList<>(facebook), i = new ArrayList<>(instagram);
-            Collections.shuffle(f, PICK); Collections.shuffle(i, PICK);
+            List<String> f = new ArrayList<>(facebook), i = new ArrayList<>(instagram), p = new ArrayList<>(x);
+            Collections.shuffle(f, PICK); Collections.shuffle(i, PICK); Collections.shuffle(p, PICK);
             FB_POOL.addAll(f); IG_POOL.addAll(i);
+            synchronized (X_POOL) { X_POOL.addAll(p); xAvailable = X_POOL.size(); }
             fbAvailable = FB_POOL.size(); igAvailable = IG_POOL.size();
             reelCacheLoaded = true;
         }
@@ -144,6 +154,20 @@ public final class Sources {
     }
 
     private static String get(String url, String cookie, boolean requireSuccess) throws IOException {
+        long started = System.currentTimeMillis();
+        try {
+            String body = fetch(url, cookie, requireSuccess);
+            note("get " + url.substring(0, Math.min(70, url.length())) + " bytes=" + body.length()
+                    + " in " + (System.currentTimeMillis() - started) + "ms");
+            return body;
+        } catch (IOException e) {
+            note("get " + url.substring(0, Math.min(70, url.length())) + " failed " + e
+                    + " after " + (System.currentTimeMillis() - started) + "ms");
+            throw e;
+        }
+    }
+
+    private static String fetch(String url, String cookie, boolean requireSuccess) throws IOException {
         HttpURLConnection c = (HttpURLConnection) new URL(url).openConnection();
         c.setConnectTimeout(12000);
         c.setReadTimeout(20000);
@@ -227,6 +251,13 @@ public final class Sources {
             } else if (INSTAGRAM.equals(source)) {
                 if (igAvailable > 0) return 0;
                 readyAt = Math.max(igBlockedUntil, igFreshAt + 5000L);
+            } else if (X.equals(source)) {
+                if (xAvailable > 0) return 0;
+                readyAt = Math.max(xBlockedUntil, xFreshAt + 5000L);
+                // X has no archive fallback: with both indexes blocked it waits for them.
+                readyAt = Math.max(readyAt, Math.min(indexBlockedUntil.get(0), indexBlockedUntil.get(1)));
+                earliest = Math.min(earliest, readyAt);
+                continue;
             } else return 0;
             readyAt = Math.max(readyAt, Math.min(indexBlockedUntil.get(2), Math.min(indexBlockedUntil.get(0), indexBlockedUntil.get(1))));
             earliest = Math.min(earliest, readyAt);
@@ -260,9 +291,13 @@ public final class Sources {
      * confidence is ever acted on, so a stray fragment does no harm.
      */
     private static synchronized void rememberIndexTitles(String host, CharSequence decoded) {
-        Matcher m = Pattern.compile(Pattern.quote(host) + "/reel/([A-Za-z0-9_-]{5,})").matcher(decoded);
+        rememberIndexTitles(Pattern.compile(Pattern.quote(host) + "/reel/([A-Za-z0-9_-]{5,})"), 1, decoded);
+    }
+
+    private static synchronized void rememberIndexTitles(Pattern link, int idGroup, CharSequence decoded) {
+        Matcher m = link.matcher(decoded);
         while (m.find()) {
-            String id = m.group(1);
+            String id = m.group(idGroup);
             if (INDEX_TITLES.containsKey(id)) continue;
             int from = m.end();
             int to = Math.min(decoded.length(), from + 600);
@@ -637,6 +672,11 @@ public final class Sources {
                 lastTiktokSignal = "caption";
                 return spoken;
             }
+            String creator = tiktokCreatorLanguage(h, anchor < 0 ? 0 : anchor);
+            if (creator != null) {
+                lastTiktokSignal = "creator";
+                return creator;
+            }
             String country = tiktokCountryLanguage(h, anchor < 0 ? 0 : anchor);
             if (country != null) {
                 lastTiktokSignal = "country";
@@ -651,6 +691,29 @@ public final class Sources {
 
     private static final Pattern ASR_ENTRY = Pattern.compile(
             "\\{[^{}]*\"LanguageCodeName\":\"([A-Za-z]{2,3})[^\"]*\"[^{}]*\"Source\":\"ASR\"[^{}]*\\}");
+
+    /**
+     * The language the clip's creator writes their own name and bio in. A
+     * music-only clip with a wordless caption says nothing itself, but a
+     * creator whose profile is written in Japanese or Spanish is making clips
+     * for that audience. Read only when speech and caption were silent.
+     */
+    static String tiktokCreatorLanguage(String h, int anchor) {
+        StringBuilder words = new StringBuilder();
+        for (String key : new String[]{"\"nickname\":\"", "\"signature\":\""}) {
+            int at = h.indexOf(key, anchor);
+            if (at < 0) continue;
+            int from = at + key.length();
+            int to = h.indexOf('"', from);
+            if (to > from) {
+                words.append(jsonText(h.substring(from, Math.min(to, from + 300)))).append(' ');
+            }
+        }
+        String text = words.toString().trim();
+        if (text.isEmpty()) return null;
+        String spoken = Vocab.detect(text);
+        return spoken != null ? spoken : Vocab.detectLatin(text);
+    }
 
     /** The language TikTok's speech recognition heard, or null without auto-captions. */
     static String tiktokAsrLanguage(String h, int anchor) {
@@ -678,7 +741,7 @@ public final class Sources {
             case "rus": case "ru": return "ru";
             case "ara": case "ar": return "ar";
             case "hin": case "hi": return "hi";
-            case "ind": case "id": return "id";
+            case "ind": case "id": case "in": return "id";
             case "tur": case "tr": return "tr";
             case "tha": case "th": return "th";
             default: return Vocab.OTHER;
@@ -926,43 +989,200 @@ public final class Sources {
     // -------------------------------------------------------------------- x
 
     /**
-     * The syndication profile widget is keyless and gives real tweet media.
-     * The word is used as a handle first (people name accounts after things),
-     * which is how a random subject reaches a random person's timeline.
+     * Posts found for the current subject but not yet played. The timeline
+     * widget this source used to read now answers "rate limit exceeded" to
+     * every request, which is why X never produced a clip; posts are found
+     * through the same public search indexes as reels instead, and each is
+     * read from the syndication post endpoint, which still answers with the
+     * post's text, language and mp4 renditions.
      */
+    private static final java.util.ArrayDeque<String> X_POOL = new java.util.ArrayDeque<String>();
+    private static volatile long xFreshAt;
+    private static volatile long xBlockedUntil;
+    private static volatile int xAvailable;
+    private static final Pattern STATUS_LINK = Pattern.compile(
+            "(?:x|twitter)\\.com/([A-Za-z0-9_]{1,15})/status/([0-9]{15,20})");
+
     private static List<Item> x(String word) throws IOException {
-        String html = get("https://syndication.twitter.com/srv/timeline-profile/screen-name/"
-                + enc(word), null);
-        String json = html;
-        Matcher script = Pattern.compile(
-                "<script id=\"__NEXT_DATA__\" type=\"application/json\">(.*?)</script>",
-                Pattern.DOTALL).matcher(html);
-        if (script.find()) {
-            json = script.group(1);
+        long now = System.currentTimeMillis();
+        synchronized (X_POOL) {
+            if (X_POOL.isEmpty() && now > xBlockedUntil && now - xFreshAt > 5000L) {
+                xFreshAt = now;
+                try {
+                    String html = statusSearch(word);
+                    Matcher m = STATUS_LINK.matcher(html);
+                    Set<String> seen = new HashSet<String>();
+                    while (m.find()) {
+                        if (seen.add(m.group(2))) {
+                            X_POOL.addLast(m.group(2));
+                        }
+                    }
+                    if (X_POOL.isEmpty()) {
+                        xBlockedUntil = now + 5000L;
+                    }
+                } catch (IOException e) {
+                    note("x search failed: " + e);
+                    xBlockedUntil = now + 10 * 60_000L;
+                }
+                note("x pool " + X_POOL.size() + " after search for " + word);
+            }
+            xAvailable = X_POOL.size();
+            List<Item> out = new ArrayList<Item>();
+            // Reading a post is one small JSON fetch, and only some posts carry a
+            // video, so several are handed over at once; the rest stay pooled.
+            for (int i = 0; i < 5 && !X_POOL.isEmpty(); i++) {
+                int skip = PICK.nextInt(X_POOL.size());
+                String id = null;
+                java.util.Iterator<String> it = X_POOL.iterator();
+                for (int k = 0; it.hasNext(); k++) {
+                    String candidate = it.next();
+                    if (k == skip) {
+                        id = candidate;
+                        it.remove();
+                        break;
+                    }
+                }
+                if (id != null) {
+                    out.add(new Item(X, id, indexTitle(id), "xprobe", "", 0, 0));
+                }
+            }
+            xAvailable = X_POOL.size();
+            return out;
         }
-        // The syndication payload is JSON, so a query separator arrives as the
-        // escape \u0026. Unescaping first is what keeps the signed query string
-        // on the URL; truncating at the backslash is what caused a 403.
-        json = json.replace("\\u0026", "&").replace("\\/", "/");
-        Matcher v = Pattern.compile(
-                "(https://video\\.twimg\\.com/[^\"\\\\]+?\\.mp4[^\"\\\\]*)").matcher(json);
-        List<Item> out = new ArrayList<Item>();
-        Set<String> seen = new HashSet<String>();
-        while (v.find() && out.size() < 12) {
-            String url = v.group(1);
-            if (!seen.add(url)) {
+    }
+
+    /** Search results naming posts on X about the subject, with their snippets. */
+    private static String statusSearch(String word) throws IOException {
+        String query = enc("site:x.com /status/ " + word + " video");
+        String[] indexes = {"https://search.brave.com/search?q=",
+                "https://html.duckduckgo.com/html/?q="};
+        for (int i = 0; i < indexes.length; i++) {
+            long now = System.currentTimeMillis();
+            if (now < indexBlockedUntil.get(i)) {
+                note("x search index " + i + " blocked for " + (indexBlockedUntil.get(i) - now) + "ms");
                 continue;
             }
-            Matcher dim = Pattern.compile("/(\\d{2,4})x(\\d{2,4})/").matcher(url);
-            int w = 0;
-            int h = 0;
-            if (dim.find()) {
-                w = Integer.parseInt(dim.group(1));
-                h = Integer.parseInt(dim.group(2));
+            try {
+                long started = System.currentTimeMillis();
+                String html = get(indexes[i] + query, null, true);
+                StringBuilder decoded = new StringBuilder(html);
+                Matcher links = Pattern.compile("uddg=([^&\"<> ]+)").matcher(html);
+                while (links.find()) {
+                    try { decoded.append(' ').append(java.net.URLDecoder.decode(links.group(1), "UTF-8")); }
+                    catch (IllegalArgumentException ignored) { }
+                }
+                boolean any = STATUS_LINK.matcher(decoded).find();
+                note("x search index " + i + " bytes=" + html.length() + " links=" + any
+                        + " in " + (System.currentTimeMillis() - started) + "ms");
+                if (any) {
+                    rememberIndexTitles(STATUS_LINK, 2, decoded);
+                    return decoded.toString();
+                }
+            } catch (IOException unavailable) {
+                note("x search index " + i + " failed: " + unavailable);
+                indexBlockedUntil.set(i, now + 10 * 60_000L);
             }
-            out.add(new Item(X, word, "", "mp4", url, w, h));
         }
-        return out;
+        return "";
+    }
+
+    /** Language X recorded for the post last read, or null when it gave none. */
+    public static volatile String lastXLanguage;
+    /** Geometry of the rendition xMedia() chose, 0 when unknown. */
+    public static volatile int lastXWidth;
+    public static volatile int lastXHeight;
+
+    /**
+     * Reads one post. Null means the endpoint could not be read; an empty
+     * string means the post exists but has no video of its own, so the
+     * caller should move on without blaming the source.
+     */
+    public static String xMedia(String id) {
+        lastCaption = "";
+        lastXLanguage = null;
+        lastXWidth = 0;
+        lastXHeight = 0;
+        lastCaptionNote = "";
+        try {
+            String json = get("https://cdn.syndication.twimg.com/tweet-result?id=" + id
+                    + "&token=" + xToken(id), null);
+            lastCaptionNote = "bytes=" + json.length();
+            if (!json.trim().startsWith("{")) {
+                return null;
+            }
+            JSONObject post = new JSONObject(json);
+            if (!"Tweet".equals(post.optString("__typename"))) {
+                return "";   // deleted, protected or age-gated: a tombstone
+            }
+            lastCaption = post.optString("text", "");
+            lastXLanguage = xLanguage(post.optString("lang", ""), lastCaption);
+            JSONObject video = post.optJSONObject("video");
+            if (video == null) {
+                return "";
+            }
+            JSONArray aspect = video.optJSONArray("aspectRatio");
+            if (aspect != null && aspect.length() == 2) {
+                lastXWidth = aspect.optInt(0);
+                lastXHeight = aspect.optInt(1);
+            }
+            JSONArray variants = video.optJSONArray("variants");
+            String best = null;
+            int bestWidth = -1;
+            for (int i = 0; variants != null && i < variants.length(); i++) {
+                JSONObject v = variants.optJSONObject(i);
+                if (v == null || !"video/mp4".equals(v.optString("type"))) continue;
+                String src = v.optString("src", "");
+                if (!src.startsWith("https://")) continue;
+                int width = 0;
+                Matcher dim = Pattern.compile("/(\\d{2,4})x(\\d{2,4})/").matcher(src);
+                if (dim.find()) {
+                    width = Integer.parseInt(dim.group(1));
+                    if (lastXWidth == 0) {
+                        lastXWidth = width;
+                        lastXHeight = Integer.parseInt(dim.group(2));
+                    }
+                }
+                // The largest rendition that is not wider than a phone screen.
+                if (best == null || (width > bestWidth && width <= 720) || (bestWidth > 720 && width < bestWidth)) {
+                    best = src;
+                    bestWidth = width;
+                }
+            }
+            return best == null ? "" : best;
+        } catch (Exception e) {
+            lastCaptionNote = "err " + e.getClass().getSimpleName();
+            return null;
+        }
+    }
+
+    /**
+     * X labels every post with a language; its placeholder codes (media
+     * only, hashtags only, undetermined) fall back to reading the text.
+     */
+    static String xLanguage(String lang, String text) {
+        switch (lang) {
+            case "": case "und": case "qme": case "zxx": case "art": case "qht": case "qam":
+            case "qst": case "qct":
+                String spoken = Vocab.detect(text);
+                return spoken != null ? spoken : Vocab.detectLatin(text);
+            case "in": return "id";   // X keeps the old code for Indonesian
+            default: return isoLanguage(lang);
+        }
+    }
+
+    /** The syndication endpoint's request token, derived from the id the way its embed does. */
+    static String xToken(String id) {
+        double x = (Double.parseDouble(id) / 1e15) * Math.PI;
+        long whole = (long) Math.floor(x);
+        StringBuilder out = new StringBuilder(Long.toString(whole, 36));
+        double fraction = x - whole;
+        for (int i = 0; i < 14 && fraction > 0; i++) {
+            fraction *= 36;
+            int digit = (int) fraction;
+            out.append(Character.forDigit(digit, 36));
+            fraction -= digit;
+        }
+        return out.toString().replace("0", "");
     }
 
     // -------------------------------------------------------------- peertube

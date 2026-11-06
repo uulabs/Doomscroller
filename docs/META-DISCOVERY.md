@@ -30,3 +30,16 @@ The existing topic sampler covers 33 families and 15 languages; 491 localized br
 - Verify TikTok embeds specify `controls=0`, while the original Doomscroller playback bar remains available.
 - Check portrait rejection, landscape-enabled rotate affordance and settings-off revalidation.
 - Report speaker audio separately from screenshots/decoder evidence.
+
+## X rows
+
+Since 0.1.51 the same file may also carry `X<tab><post id>` rows: public posts
+on X found through a search index on the maintainer's machine and checked to
+carry a portrait video at the time (the first such list is still being
+gathered, so 0.1.51 ships without X rows and finds posts live). The app reads each post from X's
+syndication endpoint when it is about to play it, which gives the current text,
+the language X recorded and the mp4 renditions, so a post that has since been
+deleted or made private is skipped. These rows let X start without a search
+index accepting the phone's request, exactly as the reel rows do for Instagram
+and Facebook. The timeline widget X used to be read from answers "rate limit
+exceeded" to every request now and is no longer used.

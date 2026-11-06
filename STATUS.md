@@ -11,8 +11,8 @@ argued in `research/FINDINGS.md`; what the app is and how it picks is in
 
 ## Where it stands
 
-- Latest published release: 0.1.50 (versionCode 51), at
-  https://github.com/uulabs/Doomscroller/releases/tag/v0.1.50, in two
+- Latest published release: 0.1.51 (versionCode 52), at
+  https://github.com/uulabs/Doomscroller/releases/tag/v0.1.51, in two
   distributions (`selfupdate` and `standard`, the latter never installs anything
   itself). `dist/` holds the built files and `SHA256SUMS`.
 - Sources on by default: YouTube, TikTok, Instagram, Facebook. Opt in: X,
@@ -28,7 +28,7 @@ argued in `research/FINDINGS.md`; what the app is and how it picks is in
 | TikTok | tag embed pages | TikTok's `player/v1` embed in a WebView, watched by `WATCH_JS` |
 | Instagram | bundled URL cache, then public search indexes | media URL read from the embed page, played by ExoPlayer |
 | Facebook | bundled URL cache, then public search indexes | mp4 read from the video plugin, played by ExoPlayer |
-| X | syndication timeline | direct mp4 (opt in) |
+| X | bundled post cache, then public search indexes; each post read from the syndication post JSON (text, language, renditions) | direct mp4 (opt in) |
 | PeerTube | Sepia Search + instance lookup | mp4 or HLS (opt in; rarely portrait) |
 
 Two slots are kept: one on screen, one prefetched. Portrait is decided from the
@@ -43,12 +43,17 @@ subjects are drawn from shuffled per-language bags that survive a restart.
   Instagram and Facebook build up supply over time.
 - Language filtering is best effort: it reads the YouTube title; for TikTok
   the speech-recognition subtitle language when the clip has auto-captions,
-  then the caption, then the country it was made in (one-language countries
-  only, so some English clips made abroad are skipped); the Instagram caption, and for Facebook the post text, canonical
-  slug and page name from the video plugin, plus the search index's title for
-  live-discovered Meta reels. A script none of the fifteen languages uses is a
-  clear mismatch. A clip is only rejected when the answer is clear, so a
-  wordless or name-only post still passes.
+  then the caption, then the creator's own name and bio, then the country it
+  was made in (one-language countries only, so some English clips made abroad
+  are skipped); for X the language X recorded for the post, else its text; the
+  Instagram caption, and for Facebook the post text, canonical slug and page
+  name from the video plugin, plus the search index's title for live-discovered
+  Meta reels. A script none of the fifteen languages uses is a clear mismatch,
+  and so are letters English never uses (ñ, ã, ß, ı, ł, Vietnamese tone marks)
+  when no English marker is present. A clip is only rejected when the answer is
+  clear, so a wordless or name-only post still passes, unless the Languages
+  setting "Only clips with a known language" is on, which skips TikTok,
+  Instagram, Facebook and X clips that give no language clue at all.
 - Audio focus, keep-screen-on and resume-on-return arrived in 0.1.46 with only
   a short S98 smoke test. The handover warns that earlier player changes broke
   sound; listen with TikTok enabled before trusting them.

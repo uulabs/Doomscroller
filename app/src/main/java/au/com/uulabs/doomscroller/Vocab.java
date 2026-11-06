@@ -216,6 +216,47 @@ public final class Vocab {
                 }
             }
         }
+        if (english == 0) {
+            return byLetters(padded);
+        }
+        return null;
+    }
+
+    /**
+     * Letters that English never uses and that belong to one language, or to
+     * languages the app does not offer. Two of a kind in a caption with no
+     * English marker at all settle it; letters shared by several languages
+     * (é, ü, ç) are left alone.
+     */
+    static String byLetters(String lower) {
+        int es = 0, pt = 0, de = 0, tr = 0, other = 0;
+        for (int i = 0; i < lower.length(); i++) {
+            char c = lower.charAt(i);
+            switch (c) {
+                case 'ñ': es++; break;
+                case 'ã': case 'õ': pt++; break;
+                case 'ß': de++; break;
+                case 'ğ': case 'ı': case 'ş': tr++; break;
+                // Polish, Czech, Slovak, Romanian, Hungarian, Nordic, Vietnamese.
+                case 'ł': case 'ż': case 'ś': case 'ę': case 'ą': case 'ź': case 'ć': case 'ń':
+                case 'ř': case 'ě': case 'ů': case 'ď': case 'ť': case 'ň': case 'ľ': case 'ĺ':
+                case 'ț': case 'ș': case 'ő': case 'ű':
+                case 'ø': case 'å': case 'æ': case 'ð': case 'þ':
+                case 'đ': case 'ơ': case 'ư': case 'ạ': case 'ả': case 'ấ': case 'ầ': case 'ậ':
+                case 'ế': case 'ề': case 'ệ': case 'ố': case 'ồ': case 'ộ': case 'ớ': case 'ờ':
+                case 'ợ': case 'ứ': case 'ừ': case 'ự': case 'ỉ': case 'ị': case 'ỏ': case 'ọ':
+                case 'ủ': case 'ụ': case 'ỹ': case 'ỵ': case 'ỷ': case 'ỳ': case 'ẽ': case 'ẫ':
+                case 'ẩ': case 'ẳ': case 'ẵ': case 'ặ': case 'ắ': case 'ằ': case 'ĩ': case 'ũ':
+                case 'ữ': case 'ử': case 'ổ': case 'ỗ': case 'ỡ': case 'ở':
+                    other++; break;
+                default: break;
+            }
+        }
+        if (other >= 2 && other >= es + pt + de + tr) return OTHER;
+        if (es >= 2 && pt + de + tr == 0) return "es";
+        if (pt >= 2 && es + de + tr == 0) return "pt";
+        if (de >= 2 && es + pt + tr == 0) return "de";
+        if (tr >= 2 && es + pt + de == 0) return "tr";
         return null;
     }
 

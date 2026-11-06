@@ -86,6 +86,19 @@ public final class Prefs {
         sp(c).edit().putBoolean(KEY_DISCLAIMER, accepted).apply();
     }
 
+    /**
+     * Whether a clip whose language cannot be told is skipped. Off, such a
+     * clip is allowed through, which keeps music-only clips but lets some
+     * foreign ones in; on, only clips with a clear language signal play.
+     */
+    public static boolean knownLanguageOnly(Context c) {
+        return sp(c).getBoolean("known_language_only", false);
+    }
+
+    public static void setKnownLanguageOnly(Context c, boolean on) {
+        sp(c).edit().putBoolean("known_language_only", on).apply();
+    }
+
     /** Landscape clips are letterboxed rather than cropped, and only if allowed. */
     public static boolean landscapeAllowed(Context c) {
         return sp(c).getBoolean(KEY_LANDSCAPE, false);

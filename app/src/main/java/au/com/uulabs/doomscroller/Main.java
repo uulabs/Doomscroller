@@ -104,7 +104,14 @@ public class Main extends Activity {
     private Slot pending;
     private Sources.Item current;
     private String lastSource;
-    private volatile boolean filling;
+    /** Discovery passes running now: one while a clip plays, two while the screen is empty. */
+    private final java.util.concurrent.atomic.AtomicInteger fillers =
+            new java.util.concurrent.atomic.AtomicInteger();
+    /** Sources a discovery pass is working on, so a second pass takes a different one. */
+    private final Set<String> inFlight = new HashSet<String>();
+    /** Mirror of screenIsBlank() for the discovery threads, which may not touch the player. */
+    private volatile boolean blankNow = true;
+    private long lastStackDump;
     private volatile boolean destroyed;
     private TopicSampler topicSampler;
     private TextView loadingMessage;
@@ -126,7 +133,8 @@ public class Main extends Activity {
     private long lastActivePing;
     /** +1 for a forward swap, -1 when going back, so motion matches the swipe. */
     private float swapDirection = 1f;
-    private boolean lastLandscape;
+    /** Geometry verdict of the item this discovery thread last resolved. */
+    private final ThreadLocal<Boolean> lastLandscape = new ThreadLocal<Boolean>();
     private GestureDetector gestures;
     private YoutubeResolver ytResolver;
     private InstagramResolver igResolver;
@@ -156,6 +164,7 @@ public class Main extends Activity {
         String title = "";     // what this clip is called, for repeat checking
         int navigation;
         long shownAt;
+        long preparedAt;       // when loading began, to notice a candidate that is taking too long
         boolean rendered;
         boolean sizeKnown;     // the decoded stream has reported its geometry
         float displayRatio;    // width * pixel ratio / height
@@ -241,6 +250,11 @@ public class Main extends Activity {
         });
         applyOrientation();
         Sources.setAllowLandscape(Prefs.landscapeAllowed(this));
+        if (BuildConfig.TRACE) {
+            Sources.trace = new java.util.function.Consumer<String>() {
+                @Override public void accept(String line) { igTrace(line); }
+            };
+        }
         ytResolver = new YoutubeResolver(this);
         igResolver = new InstagramResolver(this);
         root = new FrameLayout(this);
@@ -733,7 +747,40 @@ public class Main extends Activity {
                 if (destroyed) return;
                 if (loadingView != null) {
                     boolean blank = screenIsBlank();
+                    blankNow = blank;
                     long now = System.currentTimeMillis();
+                    if (BuildConfig.TRACE && blank && blankSince != 0 && now - blankSince > 30000
+                            && now - lastStackDump > 30000) {
+                        lastStackDump = now;
+                        for (java.util.Map.Entry<Thread, StackTraceElement[]> e
+                                : Thread.getAllStackTraces().entrySet()) {
+                            String name = e.getKey().getName();
+                            if (!name.startsWith("pool") && !name.equals("main")) continue;
+                            StringBuilder b = new StringBuilder("stack " + name + " " + e.getKey().getState());
+                            int n = 0;
+                            for (StackTraceElement f : e.getValue()) {
+                                if (n++ > 14) break;
+                                b.append(" | ").append(f.getClassName().replaceAll(".*\\.", ""))
+                                        .append('.').append(f.getMethodName()).append(':').append(f.getLineNumber());
+                            }
+                            igTrace(b.toString());
+                        }
+                    }
+                    if (blank && pending != null && !pending.rejected
+                            && !portraitVerified(pending) && pending.preparedAt != 0
+                            && now - pending.preparedAt > PENDING_SLOW_MILLIS) {
+                        boolean another;
+                        synchronized (ready) { another = !ready.isEmpty(); }
+                        if (another) {
+                            // Nothing is on screen and this candidate has still
+                            // not shown its geometry while a resolved one waits
+                            // behind it. Only one clip loads at a time, so the
+                            // slow one gives way rather than holding the face up.
+                            igTrace("slow pending " + pending.item.source + " after "
+                                    + (now - pending.preparedAt) + "ms, giving way");
+                            rejectSlot(pending);
+                        }
+                    }
                     if (loadingMessage != null && blank && blankSince != 0
                             && now - blankSince > 1500 && pending == null) {
                         // The clip has left and nothing is being measured or
@@ -786,6 +833,8 @@ public class Main extends Activity {
 
     /** How long the face may sit on a clip that has not shown a frame while another is ready. */
     private static final long STUCK_ADVANCE_MILLIS = 8000;
+    /** How long an unmeasured candidate may keep an empty screen waiting when another clip is resolved. */
+    private static final long PENDING_SLOW_MILLIS = 8000;
     /** How long before such a clip is given up even with nothing ready behind it. */
     private static final long STUCK_DROP_MILLIS = 25000;
 
@@ -982,12 +1031,29 @@ public class Main extends Activity {
     };
 
     private void fill() {
-        if (destroyed || filling) {
+        if (destroyed) {
             return;
         }
+        igTrace("fill: entered, passes=" + fillers.get() + " pending=" + (pending != null));
+        // While nothing is on screen a second discovery pass runs on another
+        // source, so one slow provider cannot hold the first clip back.
+        boolean empty;
+        synchronized (ready) { empty = ready.isEmpty(); }
+        int limit = blankNow && empty && pending == null ? 2 : 1;
+        synchronized (inFlight) {
+            // A second pass is only worth starting when a source is free for it.
+            int free = 0;
+            for (String s : Prefs.sources(this)) if (!inFlight.contains(s)) free++;
+            limit = Math.min(limit, Math.max(1, free));
+        }
+        if (fillers.get() >= limit) {
+            return;
+        }
+        igTrace("fill: pass " + (fillers.get() + 1) + " of " + limit);
         long wait = Math.max(nextDiscoveryAt - android.os.SystemClock.uptimeMillis(),
                 Sources.retryDelayMillis(Prefs.sources(this)));
         if (wait > 0) {
+            igTrace("fill: waiting " + wait + "ms");
             if (wait > 5000 && active == null && pending == null && loadingMessage != null)
                 doomer.say("Selected sources unavailable\nRetrying automatically");
             handler.removeCallbacks(retryDiscovery);
@@ -995,9 +1061,8 @@ public class Main extends Activity {
             return;
         }
         if (doomer != null) doomer.say("loading");
-        filling = true;
-        if (destroyed) {
-            filling = false;
+        if (fillers.incrementAndGet() > limit) {
+            fillers.decrementAndGet();
             return;
         }
         try { io.execute(new Runnable() {
@@ -1019,6 +1084,11 @@ public class Main extends Activity {
                         Ready r = produce();
                         if (destroyed) return;
                         if (r == null) {
+                            boolean idle;
+                            synchronized (inFlight) { idle = inFlight.isEmpty(); }
+                            if (!idle && fillers.get() > 1) {
+                                break;      // the other pass holds every source; it will refill
+                            }
                             continue;   // this subject was refused; try another
                         }
                         found = true;
@@ -1041,7 +1111,7 @@ public class Main extends Activity {
                             nextDiscoveryAt = android.os.SystemClock.uptimeMillis() + 2000;
                         }
                     }
-                    filling = false;
+                    fillers.decrementAndGet();
                 }
                 handler.post(new Runnable() {
                     @Override
@@ -1051,7 +1121,7 @@ public class Main extends Activity {
                 });
             }
         }); } catch (java.util.concurrent.RejectedExecutionException stopped) {
-            filling = false;
+            fillers.decrementAndGet();
             if (!destroyed) throw stopped;
         }
     }
@@ -1073,13 +1143,30 @@ public class Main extends Activity {
         if (sources.isEmpty()) {
             return null;
         }
-        String source = pickSource(sources);
-        if (starving && sources.contains(Sources.YOUTUBE)
-                && !Sources.YOUTUBE.equals(lastSource)) {
-            // YouTube resolves in about a second, but forcing it every attempt
-            // starves the feed when it is the thing that is failing.
-            source = Sources.YOUTUBE;
+        String source;
+        synchronized (inFlight) {
+            source = pickSource(sources);
+            if (source == null) {
+                igTrace("produce: every enabled source is busy");
+                return null;   // every enabled source is already being worked on
+            }
+            if (starving && sources.contains(Sources.YOUTUBE)
+                    && !Sources.YOUTUBE.equals(lastSource)
+                    && !inFlight.contains(Sources.YOUTUBE)) {
+                // YouTube resolves in about a second, but forcing it every attempt
+                // starves the feed when it is the thing that is failing.
+                source = Sources.YOUTUBE;
+            }
+            inFlight.add(source);
         }
+        try {
+            return produceFrom(sources, source);
+        } finally {
+            synchronized (inFlight) { inFlight.remove(source); }
+        }
+    }
+
+    private Ready produceFrom(Set<String> sources, String source) {
         String word = pickWord(source);
         List<Sources.Item> candidates;
         try {
@@ -1105,7 +1192,8 @@ public class Main extends Activity {
                         ? ytResolver.lastTitle()
                         : (Sources.INSTAGRAM.equals(item.source)
                         || Sources.TIKTOK.equals(item.source)
-                        || Sources.FACEBOOK.equals(item.source))
+                        || Sources.FACEBOOK.equals(item.source)
+                        || Sources.X.equals(item.source))
                         ? Sources.lastCaption : item.title;
                 noteSource(source, true);
                 if (!titleIsNew(shownTitle)) {
@@ -1118,7 +1206,7 @@ public class Main extends Activity {
                     igTrace("repeat media refused " + item.source);
                     continue;
                 }
-                Ready ready = new Ready(item, url, isPage(item), lastLandscape);
+                Ready ready = new Ready(item, url, isPage(item), Boolean.TRUE.equals(lastLandscape.get()));
                 ready.title = shownTitle == null ? "" : shownTitle;
                 return ready;
             }
@@ -1139,6 +1227,32 @@ public class Main extends Activity {
                 igTrace("skip tiktok caption " + spoken);
                 return null;
             }
+            if (spoken == null && Prefs.knownLanguageOnly(this)) {
+                igTrace("skip tiktok unknown language");
+                return null;
+            }
+        }
+        if ("xprobe".equals(item.kind)) {
+            String media = Sources.xMedia(item.id);
+            String spoken = Sources.lastXLanguage;
+            igTrace("x " + item.id + " -> " + (media == null ? "NOREAD" : media.isEmpty() ? "NOVIDEO" : "ok")
+                    + " lang " + (spoken == null ? "none" : spoken) + " (" + Sources.lastCaptionNote + ")");
+            if (media == null || media.isEmpty()) {
+                return null;
+            }
+            if (spoken != null && !Prefs.languages(this).contains(spoken)) {
+                return null;
+            }
+            if (spoken == null && Prefs.knownLanguageOnly(this)) {
+                return null;
+            }
+            boolean wide = Sources.lastXWidth > 0 && Sources.lastXHeight > 0
+                    && Sources.lastXWidth > Sources.lastXHeight;
+            lastLandscape.set(wide);
+            if (wide && !Prefs.landscapeAllowed(this)) {
+                return null;
+            }
+            return media;
         }
         if ("fbprobe".equals(item.kind)) {
             String media = Sources.facebookMedia(item.id);
@@ -1150,6 +1264,10 @@ public class Main extends Activity {
                 igTrace("skip fb caption " + spoken);
                 return null;
             }
+            if (spoken == null && Prefs.knownLanguageOnly(this)) {
+                igTrace("skip fb unknown language");
+                return null;
+            }
             return media;
         }
         if ("igprobe".equals(item.kind)) {
@@ -1158,6 +1276,10 @@ public class Main extends Activity {
                     + " (" + Sources.lastCaptionNote + ")");
             if (spoken != null && !Prefs.languages(this).contains(spoken)) {
                 igTrace("skip ig caption " + spoken);
+                return null;
+            }
+            if (spoken == null && Prefs.knownLanguageOnly(this)) {
+                igTrace("skip ig unknown language");
                 return null;
             }
             String direct = Sources.instagramMedia(item.id);
@@ -1177,12 +1299,15 @@ public class Main extends Activity {
             if (ytResolver == null) {
                 return null;
             }
-            YoutubeResolver.Resolved r = ytResolver.resolveBlocking(item.id, 45000);
+            // A full wait is fine behind a playing clip; with the screen empty the
+            // other sources are better asked after a short one.
+            YoutubeResolver.Resolved r = ytResolver.resolveBlocking(item.id, blankNow ? 15000 : 45000);
             if (r == null) {
                 return null;
             }
-            lastLandscape = r.width > 0 && r.height > 0 && r.height < r.width;
-            if (lastLandscape && !Prefs.landscapeAllowed(this)) {
+            boolean wide = r.width > 0 && r.height > 0 && r.height < r.width;
+            lastLandscape.set(wide);
+            if (wide && !Prefs.landscapeAllowed(this)) {
                 return null;
             }
             // The resolver reports the real title, so the language choice can
@@ -1209,12 +1334,13 @@ public class Main extends Activity {
         }
         if ("frame".equals(item.kind)) {
             // Played by the provider's own embeddable player.
-            lastLandscape = false;
+            lastLandscape.set(false);
             return item.url;
         }
         if ("mp4".equals(item.kind)) {
-            lastLandscape = !item.portraitOk();
-            if (lastLandscape && !Prefs.landscapeAllowed(this)) {
+            boolean wide = !item.portraitOk();
+            lastLandscape.set(wide);
+            if (wide && !Prefs.landscapeAllowed(this)) {
                 return null;
             }
             return item.url;
@@ -1459,21 +1585,28 @@ public class Main extends Activity {
     }
 
     private String pickSource(Set<String> enabled) {
+        Set<String> busy;
+        synchronized (inFlight) { busy = new HashSet<String>(inFlight); }   // re-entrant from produce()
         List<String> options = new ArrayList<String>();
         for (String s : Sources.ALL) {
-            if (enabled.contains(s) && !s.equals(lastSource) && !resting(s)) {
+            if (enabled.contains(s) && !s.equals(lastSource) && !resting(s) && !busy.contains(s)) {
                 options.add(s);
             }
         }
         if (options.isEmpty()) {
             for (String s : Sources.ALL) {
-                if (enabled.contains(s) && !s.equals(lastSource)) {
+                if (enabled.contains(s) && !s.equals(lastSource) && !busy.contains(s)) {
                     options.add(s);
                 }
             }
         }
         if (options.isEmpty()) {
-            options.addAll(enabled);
+            for (String s : enabled) {
+                if (!busy.contains(s)) options.add(s);
+            }
+        }
+        if (options.isEmpty()) {
+            return null;
         }
         return options.get(rand.nextInt(options.size()));
     }
@@ -1496,6 +1629,9 @@ public class Main extends Activity {
 
     /** Records each subject drawn, so variety can be measured rather than felt. */
     private void igTrace(String line) {
+        if (BuildConfig.TRACE) {
+            android.util.Log.d("Doom", line);
+        }
         if (!BuildConfig.DEBUG) {
             return;
         }
@@ -1573,6 +1709,7 @@ public class Main extends Activity {
             return;
         }
         Slot slot = new Slot();
+        slot.preparedAt = System.currentTimeMillis();
         slot.item = r.item;
         slot.title = r.title == null ? "" : r.title;
         slot.navigation = r.navigation;

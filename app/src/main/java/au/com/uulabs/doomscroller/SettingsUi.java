@@ -256,6 +256,21 @@ final class SettingsUi {
         languageCard.addView(rule, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, 1));
         languageCard.addView(languageRows);
+        View strictRule = new View(context);
+        strictRule.setBackgroundColor(DIVIDER);
+        languageCard.addView(strictRule, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, 1));
+        final Toggle strict = new Toggle(context);
+        strict.setChecked(Prefs.knownLanguageOnly(context));
+        strict.setOnChangeListener(new Toggle.OnChange() {
+            @Override
+            public void onChanged(boolean on) {
+                Prefs.setKnownLanguageOnly(context, on);
+            }
+        });
+        languageCard.addView(row(context, "Only clips with a known language",
+                "Skips clips that give no clue what language they are in. Fewer clips, fewer surprises",
+                strict, false));
         column.addView(languageCard);
 
 
