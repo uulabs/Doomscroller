@@ -22,8 +22,8 @@ android {
         applicationId "au.com.uulabs.doomscroller"
         minSdk 26
         targetSdk 35
-        versionCode 55
-        versionName "0.1.54"
+        versionCode 56
+        versionName "0.1.55"
         // A build made with -PdoomTrace=true logs the feed's decisions to logcat
         // under the tag "Doom", for diagnosing a phone that is not debuggable.
         // Published builds are made without it and stay silent.

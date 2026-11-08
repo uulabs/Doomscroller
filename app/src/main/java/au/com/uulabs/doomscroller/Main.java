@@ -2658,8 +2658,11 @@ public class Main extends Activity {
             return null;
         }
         if (Sources.X.equals(item.source)) {
-            // X gives no post id for a discovered clip, so the downloader gets
-            // the media itself rather than a made-up status link.
+            // A discovered post is known by its id; this address opens it
+            // without the handle, which the syndication read does not give.
+            if (item.id != null && item.id.matches("[0-9]{15,20}")) {
+                return "https://x.com/i/status/" + item.id;
+            }
             return item.url != null && item.url.startsWith("http") ? item.url : null;
         }
         return item.url != null && item.url.startsWith("http") ? item.url : null;
@@ -2670,6 +2673,7 @@ public class Main extends Activity {
             return;
         }
         String link = shareLink(current);
+        igTrace("share " + current.source + " " + current.id + " -> " + link);
         if (link == null || link.isEmpty()) {
             setStatus("no shareable link for this clip");
             handler.postDelayed(new Runnable() {
@@ -2680,7 +2684,6 @@ public class Main extends Activity {
             }, 2500);
             return;
         }
-        igTrace("share " + current.source + " -> " + link);
         Intent send = new Intent(Intent.ACTION_SEND);
         send.setType("text/plain");
         send.putExtra(Intent.EXTRA_TEXT, link);
