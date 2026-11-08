@@ -11,10 +11,14 @@ argued in `research/FINDINGS.md`; what the app is and how it picks is in
 
 ## Where it stands
 
-- Latest published release: 0.1.53 (versionCode 54), at
-  https://github.com/uulabs/Doomscroller/releases/tag/v0.1.53, in two
+- Latest published release: 0.1.54 (versionCode 55), at
+  https://github.com/uulabs/Doomscroller/releases/tag/v0.1.54, in two
   distributions (`selfupdate` and `standard`, the latter never installs anything
-  itself). `dist/` holds the built files and `SHA256SUMS`.
+  itself). `dist/` holds the built files and `SHA256SUMS`. The self-updater
+  fetches each release asset through GitHub's API address first and the web
+  download address second: on 8 Nov 2026 the web front end answered 504 to
+  every file for over half an hour while the API path served them, which made
+  0.1.52 and 0.1.53 report "no published checksum".
 - Sources on by default: YouTube, TikTok, Instagram, Facebook. Opt in: X,
   PeerTube. The language set defaults to English.
 - Settings sits top left with share beneath it; swipe up for next, down for

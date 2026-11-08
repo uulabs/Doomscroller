@@ -71,8 +71,8 @@ final class Updater {
                         }
                         return;
                     }
-                    final String apk = BuildConfig.SELF_UPDATE ? apkUrl(release) : null;
-                    final String sums = BuildConfig.SELF_UPDATE ? assetUrl(release, "SHA256SUMS") : null;
+                    final String[] apk = BuildConfig.SELF_UPDATE ? apkUrl(release) : null;
+                    final String[] sums = BuildConfig.SELF_UPDATE ? assetUrl(release, "SHA256SUMS") : null;
                     final String notes = notes(release.optString("body", ""));
                     activity.runOnUiThread(new Runnable() {
                         @Override
@@ -127,7 +127,7 @@ final class Updater {
     }
 
     private static void offer(final Activity activity, String version,
-                              final String page, final String apk, final String sums,
+                              final String page, final String[] apk, final String[] sums,
                               final String notes) {
         if (activity.isFinishing()) {
             return;
@@ -156,8 +156,8 @@ final class Updater {
      * installed that does not match, and a failure is reported rather than
      * leaving a tapped Download button that did nothing.
      */
-    private static void downloadAndInstall(final Activity activity, final String url,
-                                           final String sums, final String page) {
+    private static void downloadAndInstall(final Activity activity, final String[] url,
+                                           final String[] sums, final String page) {
         new Thread(new Runnable() {
             @Override
             public void run() {
@@ -170,7 +170,8 @@ final class Updater {
                     File apk = new File(dir, "doomscroller.apk");
                     String expected = expectedHash(sums, url);
                     if (expected == null) {
-                        throw new java.io.IOException("no published checksum");
+                        throw new java.io.IOException(sums == null
+                                ? "no published checksum" : "the checksum list could not be fetched");
                     }
                     String actual = download(url, apk);
                     if (!expected.equalsIgnoreCase(actual)) {
@@ -219,14 +220,8 @@ final class Updater {
     }
 
     /** Streams the file to disk and returns its SHA-256 as lower-case hex. */
-    private static String download(String url, File target) throws Exception {
-        HttpURLConnection c = (HttpURLConnection) new URL(url).openConnection();
-        c.setConnectTimeout(15000);
-        c.setReadTimeout(30000);
-        c.setRequestProperty("Accept", "application/octet-stream");
-        if (c.getResponseCode() != 200) {
-            throw new java.io.IOException("HTTP " + c.getResponseCode());
-        }
+    private static String download(String[] urls, File target) throws Exception {
+        HttpURLConnection c = open(urls);
         java.security.MessageDigest digest = java.security.MessageDigest.getInstance("SHA-256");
         try (InputStream in = c.getInputStream();
              FileOutputStream out = new FileOutputStream(target)) {
@@ -246,20 +241,16 @@ final class Updater {
         return hex.toString();
     }
 
-    /** The hash SHA256SUMS lists for the file the APK URL names, or null. */
-    private static String expectedHash(String sumsUrl, String apkUrl) {
-        if (sumsUrl == null || apkUrl == null) {
+    /** The hash SHA256SUMS lists for the file the APK is named after, or null. */
+    private static String expectedHash(String[] sumsUrls, String[] apkUrls) {
+        if (sumsUrls == null || apkUrls == null) {
             return null;
         }
+        String apkUrl = apkUrls[apkUrls.length - 1];
         String name = apkUrl.substring(apkUrl.lastIndexOf('/') + 1);
         HttpURLConnection c = null;
         try {
-            c = (HttpURLConnection) new URL(sumsUrl).openConnection();
-            c.setConnectTimeout(15000);
-            c.setReadTimeout(15000);
-            if (c.getResponseCode() != 200) {
-                return null;
-            }
+            c = open(sumsUrls);
             java.io.BufferedReader reader = new java.io.BufferedReader(
                     new java.io.InputStreamReader(c.getInputStream(), "UTF-8"));
             String line;
@@ -280,8 +271,39 @@ final class Updater {
         }
     }
 
-    /** The download address of the release asset with this exact name, or null. */
-    private static String assetUrl(JSONObject release, String wanted) {
+    /**
+     * Opens the first address that answers. A release asset has two: the API
+     * address, which hands the file over from GitHub's object store, and the
+     * web address, whose front end has been seen refusing every file for a
+     * while. Either one alone has failed; together they have not.
+     */
+    private static HttpURLConnection open(String[] urls) throws java.io.IOException {
+        java.io.IOException last = null;
+        for (String url : urls) {
+            if (url == null || url.isEmpty()) {
+                continue;
+            }
+            HttpURLConnection c = (HttpURLConnection) new URL(url).openConnection();
+            c.setConnectTimeout(15000);
+            c.setReadTimeout(30000);
+            c.setRequestProperty("Accept", "application/octet-stream");
+            c.setInstanceFollowRedirects(true);
+            try {
+                int code = c.getResponseCode();
+                if (code == 200) {
+                    return c;
+                }
+                last = new java.io.IOException("HTTP " + code);
+            } catch (java.io.IOException e) {
+                last = e;
+            }
+            c.disconnect();
+        }
+        throw last == null ? new java.io.IOException("no download address") : last;
+    }
+
+    /** The download addresses of the release asset with this exact name, or null. */
+    private static String[] assetUrl(JSONObject release, String wanted) {
         JSONArray assets = release.optJSONArray("assets");
         if (assets == null) {
             return null;
@@ -289,10 +311,15 @@ final class Updater {
         for (int i = 0; i < assets.length(); i++) {
             JSONObject asset = assets.optJSONObject(i);
             if (asset != null && wanted.equals(asset.optString("name", ""))) {
-                return asset.optString("browser_download_url", null);
+                return addresses(asset);
             }
         }
         return null;
+    }
+
+    /** API address first, web address last; the file's name is read from the last. */
+    private static String[] addresses(JSONObject asset) {
+        return new String[]{asset.optString("url", null), asset.optString("browser_download_url", null)};
     }
 
     /**
@@ -300,12 +327,12 @@ final class Updater {
      * that installs nothing by itself, and updating into that one would quietly
      * take the updater away, so it is only used if nothing else is there.
      */
-    private static String apkUrl(JSONObject release) {
+    private static String[] apkUrl(JSONObject release) {
         JSONArray assets = release.optJSONArray("assets");
         if (assets == null) {
             return null;
         }
-        String fallback = null;
+        String[] fallback = null;
         for (int i = 0; i < assets.length(); i++) {
             JSONObject asset = assets.optJSONObject(i);
             if (asset == null) {
@@ -315,7 +342,7 @@ final class Updater {
             if (!name.endsWith(".apk")) {
                 continue;
             }
-            String url = asset.optString("browser_download_url", null);
+            String[] url = addresses(asset);
             if (name.contains("no-self-update")) {
                 if (fallback == null) {
                     fallback = url;
