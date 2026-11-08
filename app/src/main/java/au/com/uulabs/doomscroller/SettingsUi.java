@@ -122,9 +122,9 @@ final class SettingsUi {
 
         // ---- sources
         column.addView(sectionLabel(context, "Sources", "Each clip is found live for a "
-                + "random subject. When the search engines refuse the phone, Instagram, "
-                + "Facebook and X fall back to a bundled list of public clips until "
-                + "they answer again"));
+                + "random subject. When the search engines refuse the phone, Instagram and "
+                + "Facebook fall back to a bundled list of public clips, and X to posts "
+                + "cited on Wikipedia, until they answer again"));
         final Set<String> enabled = Prefs.sources(context);
         LinearLayout sourceCard = card(context);
         int j = 0;
@@ -149,6 +149,22 @@ final class SettingsUi {
                     j < Sources.ALL.length - 1));
             j++;
         }
+        View randomRule = new View(context);
+        randomRule.setBackgroundColor(DIVIDER);
+        sourceCard.addView(randomRule, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, 1));
+        final Toggle randomLetters = new Toggle(context);
+        randomLetters.setChecked(Prefs.randomLetters(context));
+        randomLetters.setOnChangeListener(new Toggle.OnChange() {
+            @Override
+            public void onChanged(boolean on) {
+                Prefs.setRandomLetters(context, on);
+            }
+        });
+        sourceCard.addView(row(context, "Random letters instead of subjects",
+                "Searches for a few random letters rather than a subject from the built-in word "
+                + "lists. Stranger results, with no list behind them",
+                randomLetters, false));
         column.addView(sourceCard);
 
         // ---- formats

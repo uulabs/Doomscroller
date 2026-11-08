@@ -250,6 +250,7 @@ public class Main extends Activity {
         });
         applyOrientation();
         Sources.setAllowLandscape(Prefs.landscapeAllowed(this));
+        Sources.setLanguageFilter(Prefs.languages(this), Prefs.knownLanguageOnly(this));
         if (BuildConfig.TRACE) {
             Sources.trace = new java.util.function.Consumer<String>() {
                 @Override public void accept(String line) { igTrace(line); }
@@ -804,6 +805,17 @@ public class Main extends Activity {
                     if (settled != (loadingView.getVisibility() == View.VISIBLE)) {
                         setLoading(settled);
                     }
+                    if (settled && now - blankSince > 1200 && !gateOpen && settingsPanel == null
+                            && pendingReady() && portraitVerified(pending)
+                            && (active == null || active.rejected || (active.rootView != null
+                            && Math.abs(active.rootView.getTranslationY()) > 1f))) {
+                        // Nothing is on screen and a verified clip is waiting: whatever
+                        // trigger was missed, the feed moves on as a swipe would.
+                        igTrace("watchdog promote: active=" + (active == null ? "none"
+                                : active.item.source + (active.rejected ? " rejected" : " away"))
+                                + " pending=" + pending.item.source + " wantNext=" + wantNext);
+                        next();
+                    }
                     if (blank && blankSince != 0 && stuckActive()) {
                         long waited = now - blankSince;
                         if (waited > STUCK_ADVANCE_MILLIS && portraitVerified(pending)
@@ -859,7 +871,8 @@ public class Main extends Activity {
         if (pending.player != null) {
             return pending.player.getPlaybackState() == Player.STATE_READY;
         }
-        return pending.web != null && pending.sizeKnown;
+        return pending.web != null && (pending.sizeKnown
+                || (pending.watcherStarted && Prefs.landscapeAllowed(this)));
     }
 
     private void setLoading(boolean show) {
@@ -1458,6 +1471,10 @@ public class Main extends Activity {
                     rejectSlot(watched);
                     return;
                 }
+                if (watched == pending && !gone && portraitVerified(watched)) {
+                    // A loaded page needs no geometry report when landscape is allowed.
+                    maybePromotePending();
+                }
                 if (watched != null) {
                     view.evaluateJavascript(PAGE_SIZE_JS, new ValueCallback<String>() {
                         @Override
@@ -1621,10 +1638,25 @@ public class Main extends Activity {
      * word again either.
      */
     private String pickWord(String source) {
+        if (Prefs.randomLetters(this)) {
+            String letters = randomLetters();
+            traceWord(letters);
+            return letters;
+        }
         TopicSampler.Topic topic = topicSampler.next(Prefs.languages(this));
         String query = broadenMeta.contains(source) ? Vocab.familyQuery(topic) : topic.query;
         traceWord(query);
         return query;
+    }
+
+    /** Three or four letters with no list behind them; the sources decide what they mean. */
+    private String randomLetters() {
+        int n = 3 + rand.nextInt(2);
+        StringBuilder out = new StringBuilder();
+        for (int i = 0; i < n; i++) {
+            out.append((char) ('a' + rand.nextInt(26)));
+        }
+        return out.toString();
     }
 
     /** Records each subject drawn, so variety can be measured rather than felt. */
@@ -1869,6 +1901,12 @@ public class Main extends Activity {
             @Override
             public void onPlaybackStateChanged(int playbackState) {
                 igTrace("state " + playbackState + " src=" + created.item.source);
+                if (pending == created && playbackState == Player.STATE_READY
+                        && portraitVerified(created)) {
+                    // With landscape allowed no geometry report is awaited: a ready
+                    // clip is shown as soon as the feed is waiting for one.
+                    maybePromotePending();
+                }
                 if (active != created) {
                     return;
                 }
@@ -2690,6 +2728,7 @@ public class Main extends Activity {
             applyOrientation();
             updateRotateControl();
             Sources.setAllowLandscape(Prefs.landscapeAllowed(this));
+            Sources.setLanguageFilter(Prefs.languages(this), Prefs.knownLanguageOnly(this));
             igTrace("settings close: landscape=" + Prefs.landscapeAllowed(this)
                     + " active=" + (active != null)
                     + " verified=" + (active != null && portraitVerified(active))

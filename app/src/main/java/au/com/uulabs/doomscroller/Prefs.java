@@ -99,6 +99,15 @@ public final class Prefs {
         sp(c).edit().putBoolean("known_language_only", on).apply();
     }
 
+    /** Random letters in place of a subject from the bundled word lists. */
+    public static boolean randomLetters(Context c) {
+        return sp(c).getBoolean("random_letters", false);
+    }
+
+    public static void setRandomLetters(Context c, boolean on) {
+        sp(c).edit().putBoolean("random_letters", on).apply();
+    }
+
     /** Landscape clips are letterboxed rather than cropped, and only if allowed. */
     public static boolean landscapeAllowed(Context c) {
         return sp(c).getBoolean(KEY_LANDSCAPE, false);

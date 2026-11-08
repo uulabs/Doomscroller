@@ -33,13 +33,22 @@ The existing topic sampler covers 33 families and 15 languages; 491 localized br
 
 ## X rows
 
-Since 0.1.51 the same file may also carry `X<tab><post id>` rows: public posts
-on X found through a search index on the maintainer's machine and checked to
-carry a portrait video at the time (the first such list is still being
-gathered, so 0.1.51 ships without X rows and finds posts live). The app reads each post from X's
-syndication endpoint when it is about to play it, which gives the current text,
-the language X recorded and the mp4 renditions, so a post that has since been
-deleted or made private is skipped. These rows let X start without a search
-index accepting the phone's request, exactly as the reel rows do for Instagram
-and Facebook. The timeline widget X used to be read from answers "rate limit
-exceeded" to every request now and is no longer used.
+Since 0.1.51 the same file may also carry `X<tab><post id>` rows. The first
+list ships in 0.1.53: public posts cited by English Wikipedia articles, read from
+the encyclopaedia's public external-links table on the maintainer's machine and
+kept only when X's syndication endpoint reported a video at the time. The list
+is small to begin with and grows in later releases. The app reads each post from
+the syndication endpoint when it is about to play it, which gives the current
+text, the language X recorded and the mp4 renditions, so a post that has since
+been deleted or made private is skipped, and a landscape one is skipped unless
+landscape is allowed.
+
+The list is the last resort. Live, X first asks a search index for posts about
+the drawn subject; when both indexes refuse, it reads a random run of the same
+Wikipedia table on the phone (one small request to Wikipedia's API for up to
+500 links), and screens the candidates it finds, four at a time, before any is
+handed to the player. Only about a tenth of cited posts carry a video and few of
+those are portrait, so the live Wikipedia path is slow on its own; the search
+indexes, when they answer, give mostly video posts. The timeline widget X used
+to be read from answers "rate limit exceeded" to every request and is no longer
+used.

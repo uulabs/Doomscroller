@@ -145,6 +145,39 @@ public final class Sources {
 
         synchronized boolean liveEmpty() { return live.isEmpty(); }
 
+        synchronized int liveSize() { return live.size(); }
+
+        /** Unscreened live candidates only, for reading; never the bundled list. */
+        synchronized List<String> drawLive(int n) {
+            List<String> out = new ArrayList<String>();
+            while (out.size() < n && !live.isEmpty()) {
+                int skip = PICK.nextInt(live.size());
+                java.util.Iterator<String> it = live.iterator();
+                for (int k = 0; it.hasNext(); k++) {
+                    String candidate = it.next();
+                    if (k == skip) { out.add(candidate); it.remove(); break; }
+                }
+            }
+            available = live.size() + list.size();
+            return out;
+        }
+
+        /** The bundled list only, when nothing live passed. */
+        synchronized List<String> drawList(int n) {
+            List<String> out = new ArrayList<String>();
+            while (out.size() < n && !list.isEmpty()) {
+                int skip = PICK.nextInt(list.size());
+                java.util.Iterator<String> it = list.iterator();
+                for (int k = 0; it.hasNext(); k++) {
+                    String candidate = it.next();
+                    if (k == skip) { out.add(candidate); it.remove(); break; }
+                }
+                servedList++;
+            }
+            available = live.size() + list.size();
+            return out;
+        }
+
         /** Live first; the bundled list only when nothing live is waiting. */
         synchronized List<String> draw(int n) {
             List<String> out = new ArrayList<String>();
@@ -303,8 +336,9 @@ public final class Sources {
             } else if (X.equals(source)) {
                 if (XS.available > 0) return 0;
                 readyAt = Math.max(XS.blockedUntil, XS.freshAt + 5000L);
-                // X has no archive fallback: with both indexes blocked it waits for them.
-                readyAt = Math.max(readyAt, Math.min(indexBlockedUntil.get(0), indexBlockedUntil.get(1)));
+                // X waits for whichever answers first: a search index or Wikipedia's citation table.
+                long index = Math.min(indexBlockedUntil.get(0), indexBlockedUntil.get(1));
+                readyAt = Math.max(readyAt, Math.min(index, wikiBlockedUntil));
                 earliest = Math.min(earliest, readyAt);
                 continue;
             } else return 0;
@@ -999,32 +1033,149 @@ public final class Sources {
     private static final Pattern STATUS_LINK = Pattern.compile(
             "(?:x|twitter)\\.com/([A-Za-z0-9_]{1,15})/status/([0-9]{15,20})");
 
+    /** Candidates kept waiting before another index or Wikipedia call is made. */
+    private static final int X_LOW_WATER = 12;
+    /** Posts read in one screening pass, four at a time. */
+    private static final int X_SCREEN_BATCH = 24;
+    private static volatile long wikiBlockedUntil;
+    /** Languages the viewer allows, null for any; set by the app alongside the landscape rule. */
+    private static volatile Set<String> xLanguages;
+    private static volatile boolean xKnownLanguageOnly;
+
+    public static void setLanguageFilter(Set<String> languages, boolean knownOnly) {
+        xLanguages = languages == null ? null : new HashSet<String>(languages);
+        xKnownLanguageOnly = knownOnly;
+    }
+
+    /**
+     * Candidates come from a search index for the subject while one answers,
+     * otherwise from a random run of posts cited on Wikipedia. Only some posts
+     * carry a video, so candidates are read and screened here, several at a
+     * time, and only playable ones are handed on. The bundled list, screened
+     * when it was built, is the last resort.
+     */
     private static List<Item> x(String word) throws IOException {
         long now = System.currentTimeMillis();
-        if (XS.liveEmpty() && now > XS.blockedUntil && now - XS.freshAt > 5000L) {
+        if (XS.liveSize() < X_LOW_WATER && now > XS.blockedUntil && now - XS.freshAt > 5000L) {
             XS.freshAt = now;
+            int added = 0;
             try {
                 String html = statusSearch(word);
                 Matcher m = STATUS_LINK.matcher(html);
                 List<String> found = new ArrayList<String>();
                 while (m.find()) found.add(m.group(2));
-                int added = XS.addLive(found);
+                added = XS.addLive(found);
                 note("x live search for " + word + ": " + found.size() + " links, " + added + " new");
-                if (added == 0) {
-                    XS.blockedUntil = now + 5000L;
-                }
             } catch (IOException e) {
                 note("x search failed: " + e);
-                XS.blockedUntil = now + 10 * 60_000L;
             }
+            if (added == 0 && now > wikiBlockedUntil) {
+                try {
+                    List<String> cited = wikipediaPosts();
+                    added = XS.addLive(cited);
+                    note("x wikipedia slice: " + cited.size() + " posts, " + added + " new");
+                    if (added == 0) wikiBlockedUntil = now + 15_000L;
+                } catch (IOException e) {
+                    note("x wikipedia failed: " + e);
+                    wikiBlockedUntil = now + 5 * 60_000L;
+                }
+            }
+            if (added == 0) XS.blockedUntil = now + 5000L;
         }
         List<Item> out = new ArrayList<Item>();
-        // Reading a post is one small JSON fetch, and only some posts carry a
-        // video, so several are handed over at once; the rest wait their turn.
-        for (String id : XS.draw(5)) {
+        // Cited posts are mostly text: a few passes may be needed before one plays.
+        for (int pass = 0; pass < 3 && out.isEmpty(); pass++) {
+            List<String> batch = XS.drawLive(X_SCREEN_BATCH);
+            if (batch.isEmpty()) break;
+            List<String> passed = screenPosts(batch, 3);
+            note("x screened " + batch.size() + " live posts: " + passed.size() + " playable");
+            for (String id : passed) {
+                XS.servedLive++;
+                out.add(new Item(X, id, indexTitle(id), "xprobe", "", 0, 0));
+            }
+        }
+        if (!out.isEmpty()) return out;
+        for (String id : XS.drawList(6)) {
             out.add(new Item(X, id, indexTitle(id), "xprobe", "", 0, 0));
         }
         return out;
+    }
+
+    private static final java.util.concurrent.ExecutorService X_READERS =
+            java.util.concurrent.Executors.newFixedThreadPool(4, new java.util.concurrent.ThreadFactory() {
+                @Override public Thread newThread(Runnable r) {
+                    Thread t = new Thread(r, "x-reader");
+                    t.setDaemon(true);
+                    return t;
+                }
+            });
+
+    /** Reads posts four at a time; keeps those with a video the viewer's rules allow. */
+    private static List<String> screenPosts(List<String> ids, int wanted) {
+        List<String> passed = new ArrayList<String>();
+        for (int from = 0; from < ids.size() && passed.size() < wanted; from += 8) {
+            final List<String> group = ids.subList(from, Math.min(ids.size(), from + 8));
+            List<java.util.concurrent.Future<XPost>> reads = new ArrayList<java.util.concurrent.Future<XPost>>();
+            for (final String id : group) {
+                reads.add(X_READERS.submit(new java.util.concurrent.Callable<XPost>() {
+                    @Override public XPost call() { return xPost(id); }
+                }));
+            }
+            for (int i = 0; i < reads.size(); i++) {
+                XPost post;
+                try {
+                    post = reads.get(i).get(20, java.util.concurrent.TimeUnit.SECONDS);
+                } catch (InterruptedException stopped) {
+                    Thread.currentThread().interrupt();
+                    return passed;
+                } catch (Exception failed) {
+                    continue;
+                }
+                if (post == null || post.mp4 == null) continue;   // unreadable, gone, or no video
+                if (!allowLandscape && post.width > 0 && post.height > 0 && post.width > post.height) continue;
+                Set<String> languages = xLanguages;
+                if (post.language != null && languages != null && !languages.contains(post.language)) continue;
+                if (post.language == null && xKnownLanguageOnly) continue;
+                passed.add(group.get(i));
+            }
+        }
+        return passed;
+    }
+
+    /** Where Wikipedia's link table ends; a slice above it comes back empty and lowers this. */
+    private static volatile long wikiCeiling = 1_150_000_000L;
+    private static final String APP_UA = "UUDoomscroller/" + BuildConfig.VERSION_NAME
+            + " (https://github.com/uulabs/Doomscroller)";
+
+    /**
+     * Posts cited by English Wikipedia articles. The encyclopaedia publishes its
+     * table of external links, numbered; a random number picks a random run of
+     * citations, with no search engine involved. About a tenth carry a video.
+     */
+    private static List<String> wikipediaPosts() throws IOException {
+        long start = (long) (java.util.concurrent.ThreadLocalRandom.current().nextDouble() * wikiCeiling);
+        String json = getAs("https://en.wikipedia.org/w/api.php?action=query&list=exturlusage"
+                + "&euquery=twitter.com&euprotocol=https&eulimit=500&euprop=url&format=json"
+                + "&eunamespace=0&eucontinue=" + start, APP_UA);
+        List<String> ids = new ArrayList<String>();
+        try {
+            JSONObject root = new JSONObject(json);
+            JSONObject query = root.optJSONObject("query");
+            JSONArray rows = query == null ? null : query.optJSONArray("exturlusage");
+            Pattern status = Pattern.compile("/status(?:es)?/([0-9]{15,20})");
+            for (int i = 0; rows != null && i < rows.length(); i++) {
+                JSONObject row = rows.optJSONObject(i);
+                if (row == null) continue;
+                Matcher m = status.matcher(row.optString("url", ""));
+                if (m.find() && !ids.contains(m.group(1))) ids.add(m.group(1));
+            }
+            if ((rows == null || rows.length() == 0) && start > 100_000_000L) {
+                wikiCeiling = start;
+            }
+        } catch (org.json.JSONException invalid) {
+            throw new IOException("Invalid Wikipedia answer", invalid);
+        }
+        return ids;
     }
 
     /** How many Instagram, Facebook and X clips came from live search versus the bundled list. */
@@ -1085,7 +1236,28 @@ public final class Sources {
         lastXLanguage = null;
         lastXWidth = 0;
         lastXHeight = 0;
-        lastCaptionNote = "";
+        XPost post = xPost(id);
+        if (post == null) {
+            return null;
+        }
+        lastCaption = post.text;
+        lastXLanguage = post.language;
+        lastXWidth = post.width;
+        lastXHeight = post.height;
+        return post.mp4 == null ? "" : post.mp4;
+    }
+
+    /** One post as the syndication endpoint describes it; mp4 is null when it has no video. */
+    static final class XPost {
+        String text = "";
+        String language;
+        String mp4;
+        int width;
+        int height;
+    }
+
+    /** Reads one post; null when the endpoint could not be read. Safe to call from any thread. */
+    static XPost xPost(String id) {
         try {
             String json = get("https://cdn.syndication.twimg.com/tweet-result?id=" + id
                     + "&token=" + xToken(id), null);
@@ -1094,19 +1266,20 @@ public final class Sources {
                 return null;
             }
             JSONObject post = new JSONObject(json);
+            XPost out = new XPost();
             if (!"Tweet".equals(post.optString("__typename"))) {
-                return "";   // deleted, protected or age-gated: a tombstone
+                return out;   // deleted, protected or age-gated: a tombstone, no video
             }
-            lastCaption = post.optString("text", "");
-            lastXLanguage = xLanguage(post.optString("lang", ""), lastCaption);
+            out.text = post.optString("text", "");
+            out.language = xLanguage(post.optString("lang", ""), out.text);
             JSONObject video = post.optJSONObject("video");
             if (video == null) {
-                return "";
+                return out;
             }
             JSONArray aspect = video.optJSONArray("aspectRatio");
             if (aspect != null && aspect.length() == 2) {
-                lastXWidth = aspect.optInt(0);
-                lastXHeight = aspect.optInt(1);
+                out.width = aspect.optInt(0);
+                out.height = aspect.optInt(1);
             }
             JSONArray variants = video.optJSONArray("variants");
             String best = null;
@@ -1120,9 +1293,9 @@ public final class Sources {
                 Matcher dim = Pattern.compile("/(\\d{2,4})x(\\d{2,4})/").matcher(src);
                 if (dim.find()) {
                     width = Integer.parseInt(dim.group(1));
-                    if (lastXWidth == 0) {
-                        lastXWidth = width;
-                        lastXHeight = Integer.parseInt(dim.group(2));
+                    if (out.width == 0) {
+                        out.width = width;
+                        out.height = Integer.parseInt(dim.group(2));
                     }
                 }
                 // The largest rendition that is not wider than a phone screen.
@@ -1131,7 +1304,8 @@ public final class Sources {
                     bestWidth = width;
                 }
             }
-            return best == null ? "" : best;
+            out.mp4 = best;
+            return out;
         } catch (Exception e) {
             lastCaptionNote = "err " + e.getClass().getSimpleName();
             return null;
