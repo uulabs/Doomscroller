@@ -11,9 +11,8 @@ argued in `research/FINDINGS.md`; what the app is and how it picks is in
 
 ## Where it stands
 
-- Latest published release: 0.1.55 (versionCode 56), at
-  https://github.com/uulabs/Doomscroller/releases/tag/v0.1.55; 0.1.56
-  (versionCode 57) is built but not yet published, in two
+- Latest published release: 0.1.56 (versionCode 57), at
+  https://github.com/uulabs/Doomscroller/releases/tag/v0.1.56, in two
   distributions (`selfupdate` and `standard`, the latter never installs anything
   itself). `dist/` holds the built files and `SHA256SUMS`. The self-updater
   fetches each release asset through GitHub's API address first and the web
