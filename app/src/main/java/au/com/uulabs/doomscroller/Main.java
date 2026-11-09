@@ -181,6 +181,15 @@ public class Main extends Activity {
     @Override
     protected void onCreate(Bundle state) {
         loadSeen();
+        Sources.setSeenFilter(new Sources.SeenFilter() {
+            @Override public boolean seen(String source, String id) {
+                synchronized (seen) { return seen.contains(source + ":" + id); }
+            }
+        });
+        Sources.setXPoolStore(new Sources.XPoolStore() {
+            @Override public String load() { return Prefs.xPool(Main.this); }
+            @Override public void save(String csv) { Prefs.setXPool(Main.this, csv); }
+        });
         loadPlayed();
         super.onCreate(state);
         buildUi();
@@ -252,6 +261,7 @@ public class Main extends Activity {
         Sources.setAllowLandscape(Prefs.landscapeAllowed(this));
         Sources.setLanguageFilter(Prefs.languages(this), Prefs.knownLanguageOnly(this));
         Sources.setBundledLists(Prefs.bundledLists(this));
+        Sources.setXBackground(Prefs.sources(this).contains(Sources.X));
         if (BuildConfig.TRACE) {
             Sources.trace = new java.util.function.Consumer<String>() {
                 @Override public void accept(String line) { igTrace(line); }
@@ -1690,8 +1700,14 @@ public class Main extends Activity {
     /** Claims an item; false when another pass already has or has shown it. */
     private boolean rememberIfNew(Sources.Item item) {
         synchronized (seen) {
-            return seen.add(item.toString());
+            if (!seen.add(item.toString())) return false;
+            // A queued clip is history too: without marking the set dirty it was
+            // only written when some other add happened to, and X posts that
+            // played came back after a relaunch.
+            seenAdds++;
+            seenDirty = true;
         }
+        return true;
     }
 
     private List<Sources.Item> filter(List<Sources.Item> in) {
@@ -1701,15 +1717,18 @@ public class Main extends Activity {
         for (Sources.Item it : in) {
             if (!sources.contains(it.source)
                     || (!it.portraitOk() && !Prefs.landscapeAllowed(this))) {
+                igTrace("filter drop " + it + " source/shape");
                 continue;
             }
             synchronized (seen) {
                 if (seen.contains(it.toString())) {
+                    igTrace("filter drop " + it + " seen");
                     continue;
                 }
             }
             String detected = Vocab.detect(it.title);
             if (detected != null && !langs.contains(detected)) {
+                igTrace("filter drop " + it + " title language " + detected + " [" + it.title + "]");
                 continue;
             }
             out.add(it);
@@ -2734,6 +2753,7 @@ public class Main extends Activity {
             Sources.setAllowLandscape(Prefs.landscapeAllowed(this));
             Sources.setLanguageFilter(Prefs.languages(this), Prefs.knownLanguageOnly(this));
             Sources.setBundledLists(Prefs.bundledLists(this));
+            Sources.setXBackground(Prefs.sources(this).contains(Sources.X));
             igTrace("settings close: landscape=" + Prefs.landscapeAllowed(this)
                     + " active=" + (active != null)
                     + " verified=" + (active != null && portraitVerified(active))
@@ -2811,6 +2831,7 @@ public class Main extends Activity {
         // Leaving the app is the natural point to write down what has been shown.
         flushSeen();
         flushPlayed();
+        Sources.setXBackground(false);
     }
 
     /**
@@ -2821,6 +2842,7 @@ public class Main extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
+        Sources.setXBackground(Prefs.sources(this).contains(Sources.X));
         foreground = true;
         syncDoomer();
         if (active != null && active.player != null && !paused && !gateOpen

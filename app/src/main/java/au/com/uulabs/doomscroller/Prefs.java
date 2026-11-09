@@ -181,6 +181,15 @@ public final class Prefs {
         sp(c).edit().putString(KEY_SEEN_IDS, csv).apply();
     }
 
+    /** Screened X posts waiting to be shown, so a launch does not start from nothing. */
+    public static String xPool(Context c) {
+        return sp(c).getString("x_pool", "");
+    }
+
+    public static void setXPool(Context c, String csv) {
+        sp(c).edit().putString("x_pool", csv).apply();
+    }
+
     /** What is left of a language's subject words before the bag is refilled and shuffled. */
     public static String wordBag(Context c, String lang) {
         return sp(c).getString(KEY_BAG + lang, "");

@@ -142,7 +142,35 @@ public final class Sources {
 
         /** What can be drawn now: the bundled list counts only while lists are allowed. */
         synchronized int available() {
-            return live.size() + (bundledLists ? list.size() : 0);
+            return pool.size() + live.size() + (bundledLists ? list.size() : 0);
+        }
+
+        /** Screened, playable, not yet shown: the first place a draw looks. Persisted. */
+        final java.util.ArrayDeque<String> pool = new java.util.ArrayDeque<String>();
+
+        synchronized int poolSize() { return pool.size(); }
+
+        synchronized boolean addPool(String id) {
+            if (pool.contains(id) || pool.size() >= X_POOL_MAX) return false;
+            pool.addLast(id);
+            return true;
+        }
+
+        synchronized List<String> drawPool(int n) {
+            List<String> out = new ArrayList<String>();
+            while (out.size() < n && !pool.isEmpty()) out.add(pool.pollFirst());
+            return out;
+        }
+
+        synchronized String poolCsv() {
+            StringBuilder b = new StringBuilder();
+            for (String id : pool) { if (b.length() > 0) b.append(','); b.append(id); }
+            return b.toString();
+        }
+
+        synchronized void seedPool(String csv) {
+            if (csv == null || csv.isEmpty()) return;
+            for (String id : csv.split(",")) if (id.matches("[0-9]{15,20}") && !pool.contains(id) && pool.size() < X_POOL_MAX) pool.addLast(id);
         }
 
         synchronized boolean liveEmpty() { return live.isEmpty(); }
@@ -236,9 +264,16 @@ public final class Sources {
     }
 
     private static String get(String url, String cookie, boolean requireSuccess) throws IOException {
+        return get(url, cookie, requireSuccess, 20000);
+    }
+
+    /** Discovery lookups (search indexes, the archive) get a short read timeout: one slow index must not hold the feed. */
+    private static final int LOOKUP_TIMEOUT_MS = 8000;
+
+    private static String get(String url, String cookie, boolean requireSuccess, int readTimeoutMs) throws IOException {
         long started = System.currentTimeMillis();
         try {
-            String body = fetch(url, cookie, requireSuccess);
+            String body = fetch(url, cookie, requireSuccess, readTimeoutMs);
             note("get " + url.substring(0, Math.min(70, url.length())) + " bytes=" + body.length()
                     + " in " + (System.currentTimeMillis() - started) + "ms");
             return body;
@@ -249,10 +284,10 @@ public final class Sources {
         }
     }
 
-    private static String fetch(String url, String cookie, boolean requireSuccess) throws IOException {
+    private static String fetch(String url, String cookie, boolean requireSuccess, int readTimeoutMs) throws IOException {
         HttpURLConnection c = (HttpURLConnection) new URL(url).openConnection();
-        c.setConnectTimeout(12000);
-        c.setReadTimeout(20000);
+        c.setConnectTimeout(Math.min(12000, readTimeoutMs));
+        c.setReadTimeout(readTimeoutMs);
         c.setRequestProperty("User-Agent", UA);
         c.setRequestProperty("Accept", "text/html,application/xhtml+xml,application/json");
         c.setRequestProperty("Accept-Language", "en-AU,en;q=0.9");
@@ -335,10 +370,10 @@ public final class Sources {
                 readyAt = Math.max(IG.blockedUntil, IG.freshAt + 5000L);
             } else if (X.equals(source)) {
                 if (XS.available() > 0) return 0;
-                readyAt = Math.max(XS.blockedUntil, XS.freshAt + 5000L);
-                // X waits for whichever answers first: a search index or Wikipedia's citation table.
+                // X waits for whichever answers first: a search index or Wikipedia's
+                // citation table. The index pace (freshAt) does not hold Wikipedia back.
                 long index = Math.min(indexBlockedUntil.get(0), indexBlockedUntil.get(1));
-                readyAt = Math.max(readyAt, Math.min(index, wikiBlockedUntil));
+                readyAt = Math.max(XS.blockedUntil, Math.min(index, wikiBlockedUntil));
                 earliest = Math.min(earliest, readyAt);
                 continue;
             } else return 0;
@@ -430,7 +465,7 @@ public final class Sources {
             long now = System.currentTimeMillis();
             if (now < indexBlockedUntil.get(i)) continue;
             try {
-                String html = get(indexes[i] + query, null, true);
+                String html = get(indexes[i] + query, null, true, LOOKUP_TIMEOUT_MS);
                 // DuckDuckGo wraps destinations in percent-encoded uddg links.
                 StringBuilder decoded = new StringBuilder(html);
                 Matcher links = Pattern.compile("uddg=([^&\"<> ]+)").matcher(html);
@@ -471,17 +506,17 @@ public final class Sources {
         long now = System.currentTimeMillis();
         Integer count = archivePages.get(host);
         if (count == null || now - archivePagesAt.getOrDefault(host, 0L) > 6 * 60 * 60_000L) {
-            String number = get(base + "&showNumPages=true", null, true).trim();
+            String number = get(base + "&showNumPages=true", null, true, LOOKUP_TIMEOUT_MS).trim();
             try { count = Integer.parseInt(number); }
             catch (NumberFormatException invalid) { throw new IOException("Invalid CDX page count"); }
             if (count <= 0 || count > 10_000_000) throw new IOException("Empty CDX index");
             archivePages.put(host, count); archivePagesAt.put(host, now);
         }
-        int page = java.util.concurrent.ThreadLocalRandom.current().nextInt(count);
+        int page = SLICE.nextInt(count);
         Integer previous = lastArchivePage.get(host);
         if (count > 1 && previous != null && page == previous) page = (page + 1) % count;
         String body = get(base + "&page=" + page
-                + "&output=json&filter=statuscode%3A200&collapse=urlkey&fl=original&limit=1000", null, true);
+                + "&output=json&filter=statuscode%3A200&collapse=urlkey&fl=original&limit=1000", null, true, LOOKUP_TIMEOUT_MS);
         try {
             JSONArray rows = new JSONArray(body);
             StringBuilder links = new StringBuilder();
@@ -1065,37 +1100,143 @@ public final class Sources {
      * time, and only playable ones are handed on. The bundled list, screened
      * when it was built, is the last resort.
      */
-    private static List<Item> x(String word) throws IOException {
+    /** Screened X posts kept ready, on disk, so the next clip and the next launch do not wait. */
+    private static final int X_POOL_MAX = 40;
+    private static final int X_POOL_TARGET = 24;
+
+    public interface XPoolStore { String load(); void save(String csv); }
+
+    private static volatile XPoolStore xPoolStore;
+
+    public static void setXPoolStore(XPoolStore store) {
+        xPoolStore = store;
+        if (store != null) XS.seedPool(store.load());
+    }
+
+    private static void savePool() {
+        XPoolStore store = xPoolStore;
+        if (store != null) store.save(XS.poolCsv());
+    }
+
+    private static volatile boolean xBackgroundOn;
+    private static Thread xScreener;
+
+    /**
+     * Keeps the X pool topped up while the app is in front and X is selected.
+     * Cited posts are mostly text, roughly one in a hundred is a portrait clip
+     * in the chosen language, so the screening runs ahead of the feed at a
+     * steady pace (a dozen reads, then a pause) rather than in a burst when
+     * the feed is already waiting.
+     */
+    public static synchronized void setXBackground(boolean on) {
+        xBackgroundOn = on;
+        if (on && (xScreener == null || !xScreener.isAlive())) {
+            xScreener = new Thread(new Runnable() {
+                @Override public void run() { screenAhead(); }
+            }, "x-screener");
+            xScreener.setDaemon(true);
+            xScreener.start();
+        }
+    }
+
+    private static void screenAhead() {
+        while (true) {
+            try {
+                if (!xBackgroundOn) { Thread.sleep(1000); continue; }
+                if (XS.poolSize() >= X_POOL_TARGET) { Thread.sleep(5000); continue; }
+                if (XS.liveSize() < X_LOW_WATER) refillX(null);
+                List<String> batch = XS.drawLive(12);
+                if (batch.isEmpty()) { Thread.sleep(3000); continue; }
+                List<String> passed = screenPosts(batch, batch.size());
+                int added = 0;
+                for (String id : passed) if (XS.addPool(id)) added++;
+                if (added > 0) savePool();
+                note("x screened ahead " + batch.size() + ": " + passed.size() + " playable, pool " + XS.poolSize());
+                Thread.sleep(1500);
+            } catch (InterruptedException stopped) {
+                return;
+            } catch (RuntimeException unexpected) {
+                note("x screener: " + unexpected);
+                try { Thread.sleep(5000); } catch (InterruptedException stopped) { return; }
+            }
+        }
+    }
+
+    /**
+     * Posts the phone has already queued or played, so a candidate that would
+     * only be refused afterwards is never read. Cited posts recur across
+     * sessions: without this, most of a screened batch was thrown away.
+     */
+    public interface SeenFilter { boolean seen(String source, String id); }
+
+    private static volatile SeenFilter seenFilter;
+
+    public static void setSeenFilter(SeenFilter filter) {
+        seenFilter = filter;
+    }
+
+    private static List<String> unseen(String source, List<String> ids) {
+        SeenFilter filter = seenFilter;
+        if (filter == null) return ids;
+        List<String> out = new ArrayList<String>(ids.size());
+        for (String id : ids) if (!filter.seen(source, id)) out.add(id);
+        return out;
+    }
+
+    /**
+     * Tops up X's live candidates. A search index is asked at most once every
+     * five seconds and only while one is answering; Wikipedia's citation table
+     * answers in about a second and is asked whenever the live set is low, so
+     * a phone the indexes refuse is not held to the index pace.
+     */
+    private static void refillX(String word) {
         long now = System.currentTimeMillis();
-        if (XS.liveSize() < X_LOW_WATER && now > XS.blockedUntil && now - XS.freshAt > 5000L) {
+        if (now < XS.blockedUntil) return;
+        int added = 0;
+        boolean indexesBlocked = now < indexBlockedUntil.get(0) && now < indexBlockedUntil.get(1);
+        if (word != null && !indexesBlocked && now - XS.freshAt > 5000L) {
             XS.freshAt = now;
-            int added = 0;
             try {
                 String html = statusSearch(word);
                 Matcher m = STATUS_LINK.matcher(html);
                 List<String> found = new ArrayList<String>();
                 while (m.find()) found.add(m.group(2));
-                added = XS.addLive(found);
+                added = XS.addLive(unseen(X, found));
                 note("x live search for " + word + ": " + found.size() + " links, " + added + " new");
             } catch (IOException e) {
                 note("x search failed: " + e);
             }
-            if (added == 0 && now > wikiBlockedUntil) {
-                try {
-                    List<String> cited = wikipediaPosts();
-                    added = XS.addLive(cited);
-                    note("x wikipedia slice: " + cited.size() + " posts, " + added + " new");
-                    if (added == 0) wikiBlockedUntil = now + 15_000L;
-                } catch (IOException e) {
-                    note("x wikipedia failed: " + e);
-                    wikiBlockedUntil = now + 5 * 60_000L;
-                }
-            }
-            if (added == 0) XS.blockedUntil = now + 5000L;
         }
+        if (added == 0 && now > wikiBlockedUntil) {
+            try {
+                List<String> cited = wikipediaPosts();
+                added = XS.addLive(unseen(X, cited));
+                note("x wikipedia slice: " + cited.size() + " posts, " + added + " new");
+                if (added == 0) wikiBlockedUntil = now + 15_000L;
+            } catch (IOException e) {
+                note("x wikipedia failed: " + e);
+                wikiBlockedUntil = now + 5 * 60_000L;
+            }
+        }
+        if (added == 0) XS.blockedUntil = now + 5000L;
+    }
+
+    private static List<Item> x(String word) throws IOException {
         List<Item> out = new ArrayList<Item>();
-        // Cited posts are mostly text: a few passes may be needed before one plays.
-        for (int pass = 0; pass < 3 && out.isEmpty(); pass++) {
+        List<String> pooled = unseen(X, XS.drawPool(3));
+        if (!pooled.isEmpty()) {
+            savePool();
+            for (String id : pooled) {
+                XS.servedLive++;
+                out.add(new Item(X, id, indexTitle(id), "xprobe", "", 0, 0));
+            }
+            note("x from pool: " + pooled.size() + ", pool left " + XS.poolSize());
+            return out;
+        }
+        // Cited posts are mostly text: a few passes may be needed before one
+        // plays, and the live set is topped up between passes when it runs low.
+        for (int pass = 0; pass < 4 && out.isEmpty(); pass++) {
+            if (XS.liveSize() < X_LOW_WATER) refillX(word);
             List<String> batch = XS.drawLive(X_SCREEN_BATCH);
             if (batch.isEmpty()) break;
             List<String> passed = screenPosts(batch, 3);
@@ -1113,7 +1254,7 @@ public final class Sources {
     }
 
     private static final java.util.concurrent.ExecutorService X_READERS =
-            java.util.concurrent.Executors.newFixedThreadPool(4, new java.util.concurrent.ThreadFactory() {
+            java.util.concurrent.Executors.newFixedThreadPool(6, new java.util.concurrent.ThreadFactory() {
                 @Override public Thread newThread(Runnable r) {
                     Thread t = new Thread(r, "x-reader");
                     t.setDaemon(true);
@@ -1124,8 +1265,8 @@ public final class Sources {
     /** Reads posts four at a time; keeps those with a video the viewer's rules allow. */
     private static List<String> screenPosts(List<String> ids, int wanted) {
         List<String> passed = new ArrayList<String>();
-        for (int from = 0; from < ids.size() && passed.size() < wanted; from += 8) {
-            final List<String> group = ids.subList(from, Math.min(ids.size(), from + 8));
+        for (int from = 0; from < ids.size() && passed.size() < wanted; from += 12) {
+            final List<String> group = ids.subList(from, Math.min(ids.size(), from + 12));
             List<java.util.concurrent.Future<XPost>> reads = new ArrayList<java.util.concurrent.Future<XPost>>();
             for (final String id : group) {
                 reads.add(X_READERS.submit(new java.util.concurrent.Callable<XPost>() {
@@ -1154,7 +1295,8 @@ public final class Sources {
     }
 
     /** Where Wikipedia's link table ends; a slice above it comes back empty and lowers this. */
-    private static volatile long wikiCeiling = 1_150_000_000L;
+    private static final long wikiCeiling = 1_200_000_000L;
+    private static final java.security.SecureRandom SLICE = new java.security.SecureRandom();
     private static final String APP_UA = "UUDoomscroller/" + BuildConfig.VERSION_NAME
             + " (https://github.com/uulabs/Doomscroller)";
 
@@ -1164,7 +1306,9 @@ public final class Sources {
      * citations, with no search engine involved. About a tenth carry a video.
      */
     private static List<String> wikipediaPosts() throws IOException {
-        long start = (long) (java.util.concurrent.ThreadLocalRandom.current().nextDouble() * wikiCeiling);
+        // SLICE, not ThreadLocalRandom: on the S98 the latter gave the same offsets at every
+        // launch, so only a dozen slices were ever read and the same clips came back after a restart.
+        long start = (long) (SLICE.nextDouble() * wikiCeiling);
         String json = getAs("https://en.wikipedia.org/w/api.php?action=query&list=exturlusage"
                 + "&euquery=twitter.com&euprotocol=https&eulimit=500&euprop=url&format=json"
                 + "&eunamespace=0&eucontinue=" + start, APP_UA);
@@ -1180,9 +1324,8 @@ public final class Sources {
                 Matcher m = status.matcher(row.optString("url", ""));
                 if (m.find() && !ids.contains(m.group(1))) ids.add(m.group(1));
             }
-            if ((rows == null || rows.length() == 0) && start > 100_000_000L) {
-                wikiCeiling = start;
-            }
+            // An empty answer is a sparse stretch of the table, not its end; the
+            // ceiling was measured (no rows above about 1.2e9 on 9 Nov 2026).
         } catch (org.json.JSONException invalid) {
             throw new IOException("Invalid Wikipedia answer", invalid);
         }
@@ -1209,7 +1352,7 @@ public final class Sources {
             }
             try {
                 long started = System.currentTimeMillis();
-                String html = get(indexes[i] + query, null, true);
+                String html = get(indexes[i] + query, null, true, LOOKUP_TIMEOUT_MS);
                 StringBuilder decoded = new StringBuilder(html);
                 Matcher links = Pattern.compile("uddg=([^&\"<> ]+)").matcher(html);
                 while (links.find()) {
