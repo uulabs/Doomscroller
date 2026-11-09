@@ -164,7 +164,20 @@ final class SettingsUi {
         sourceCard.addView(row(context, "Random letters instead of subjects",
                 "Searches for a few random letters rather than a subject from the built-in word "
                 + "lists. Stranger results, with no list behind them",
-                randomLetters, false));
+                randomLetters, true));
+        final Toggle bundledLists = new Toggle(context);
+        bundledLists.setChecked(Prefs.bundledLists(context));
+        bundledLists.setOnChangeListener(new Toggle.OnChange() {
+            @Override
+            public void onChanged(boolean on) {
+                Prefs.setBundledLists(context, on);
+            }
+        });
+        sourceCard.addView(row(context, "Built-in fallback lists",
+                "When the search engines refuse the phone, Instagram, Facebook and X fall back to "
+                + "lists of public clips shipped with the app. Off, the feed stays purely live and "
+                + "waits for the web to answer instead",
+                bundledLists, false));
         column.addView(sourceCard);
 
         // ---- formats

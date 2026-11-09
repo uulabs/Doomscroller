@@ -12,7 +12,8 @@ argued in `research/FINDINGS.md`; what the app is and how it picks is in
 ## Where it stands
 
 - Latest published release: 0.1.55 (versionCode 56), at
-  https://github.com/uulabs/Doomscroller/releases/tag/v0.1.55, in two
+  https://github.com/uulabs/Doomscroller/releases/tag/v0.1.55; 0.1.56
+  (versionCode 57) is built but not yet published, in two
   distributions (`selfupdate` and `standard`, the latter never installs anything
   itself). `dist/` holds the built files and `SHA256SUMS`. The self-updater
   fetches each release asset through GitHub's API address first and the web
@@ -59,6 +60,11 @@ subjects are drawn from shuffled per-language bags that survive a restart.
 - The Sources setting "Random letters instead of subjects" replaces the topic
   lists with three or four random letters as the search term, for people who
   do not want any list behind the feed. Results are stranger and sparser.
+- The Sources setting "Built-in fallback lists" (0.1.56, on by default) is the
+  other half of that: off, the bundled Instagram, Facebook and X lists are never
+  drawn, every clip comes from a live search or Wikipedia's citations, and when
+  the indexes refuse the phone the feed says "Selected sources unavailable" and
+  retries rather than showing a shipped list. Both off is the pure-random feed.
 - The feed moves on by itself when nothing is on screen and a verified clip is
   ready: a ready player or a loaded page is promoted as soon as the feed waits
   for one, not only on a geometry report (which some pages never give while

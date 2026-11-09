@@ -251,6 +251,7 @@ public class Main extends Activity {
         applyOrientation();
         Sources.setAllowLandscape(Prefs.landscapeAllowed(this));
         Sources.setLanguageFilter(Prefs.languages(this), Prefs.knownLanguageOnly(this));
+        Sources.setBundledLists(Prefs.bundledLists(this));
         if (BuildConfig.TRACE) {
             Sources.trace = new java.util.function.Consumer<String>() {
                 @Override public void accept(String line) { igTrace(line); }
@@ -2732,6 +2733,7 @@ public class Main extends Activity {
             updateRotateControl();
             Sources.setAllowLandscape(Prefs.landscapeAllowed(this));
             Sources.setLanguageFilter(Prefs.languages(this), Prefs.knownLanguageOnly(this));
+            Sources.setBundledLists(Prefs.bundledLists(this));
             igTrace("settings close: landscape=" + Prefs.landscapeAllowed(this)
                     + " active=" + (active != null)
                     + " verified=" + (active != null && portraitVerified(active))

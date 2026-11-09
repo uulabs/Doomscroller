@@ -124,7 +124,6 @@ public final class Sources {
         final java.util.ArrayDeque<String> live = new java.util.ArrayDeque<String>();
         final java.util.ArrayDeque<String> list = new java.util.ArrayDeque<String>();
         final Set<String> known = new HashSet<String>();
-        volatile int available;
         volatile long freshAt;
         volatile long blockedUntil;
         /** How many were handed out from each side, for the audit trail. */
@@ -133,14 +132,17 @@ public final class Sources {
 
         synchronized void seed(java.util.Collection<String> ids) {
             for (String id : ids) if (known.add(id)) list.addLast(id);
-            available = live.size() + list.size();
         }
 
         synchronized int addLive(java.util.Collection<String> ids) {
             int added = 0;
             for (String id : ids) if (known.add(id)) { live.addLast(id); added++; }
-            available = live.size() + list.size();
             return added;
+        }
+
+        /** What can be drawn now: the bundled list counts only while lists are allowed. */
+        synchronized int available() {
+            return live.size() + (bundledLists ? list.size() : 0);
         }
 
         synchronized boolean liveEmpty() { return live.isEmpty(); }
@@ -158,14 +160,13 @@ public final class Sources {
                     if (k == skip) { out.add(candidate); it.remove(); break; }
                 }
             }
-            available = live.size() + list.size();
             return out;
         }
 
-        /** The bundled list only, when nothing live passed. */
+        /** The bundled list only, when nothing live passed; nothing while lists are off. */
         synchronized List<String> drawList(int n) {
             List<String> out = new ArrayList<String>();
-            while (out.size() < n && !list.isEmpty()) {
+            while (bundledLists && out.size() < n && !list.isEmpty()) {
                 int skip = PICK.nextInt(list.size());
                 java.util.Iterator<String> it = list.iterator();
                 for (int k = 0; it.hasNext(); k++) {
@@ -174,15 +175,15 @@ public final class Sources {
                 }
                 servedList++;
             }
-            available = live.size() + list.size();
             return out;
         }
 
-        /** Live first; the bundled list only when nothing live is waiting. */
+        /** Live first; the bundled list only when nothing live is waiting and lists are allowed. */
         synchronized List<String> draw(int n) {
             List<String> out = new ArrayList<String>();
             while (out.size() < n) {
                 java.util.ArrayDeque<String> from = live.isEmpty() ? list : live;
+                if (from == list && !bundledLists) break;
                 if (from.isEmpty()) break;
                 int skip = PICK.nextInt(from.size());
                 java.util.Iterator<String> it = from.iterator();
@@ -192,7 +193,6 @@ public final class Sources {
                 }
                 if (from == live) servedLive++; else servedList++;
             }
-            available = live.size() + list.size();
             return out;
         }
     }
@@ -328,13 +328,13 @@ public final class Sources {
         for (String source : enabled) {
             long readyAt;
             if (FACEBOOK.equals(source)) {
-                if (FB.available > 0) return 0;
+                if (FB.available() > 0) return 0;
                 readyAt = Math.max(FB.blockedUntil, FB.freshAt + 5000L);
             } else if (INSTAGRAM.equals(source)) {
-                if (IG.available > 0) return 0;
+                if (IG.available() > 0) return 0;
                 readyAt = Math.max(IG.blockedUntil, IG.freshAt + 5000L);
             } else if (X.equals(source)) {
-                if (XS.available > 0) return 0;
+                if (XS.available() > 0) return 0;
                 readyAt = Math.max(XS.blockedUntil, XS.freshAt + 5000L);
                 // X waits for whichever answers first: a search index or Wikipedia's citation table.
                 long index = Math.min(indexBlockedUntil.get(0), indexBlockedUntil.get(1));
@@ -903,6 +903,17 @@ public final class Sources {
 
     /** Set from the settings; landscape results are only asked for when allowed. */
     private static boolean allowLandscape;
+
+    /**
+     * Whether the bundled lists may be drawn at all. Off, every clip comes from
+     * a live search or Wikipedia's citations, and a phone the indexes refuse
+     * waits and retries rather than showing a list the app shipped with.
+     */
+    private static volatile boolean bundledLists = true;
+
+    public static void setBundledLists(boolean allowed) {
+        bundledLists = allowed;
+    }
 
     public static void setAllowLandscape(boolean allowed) {
         allowLandscape = allowed;

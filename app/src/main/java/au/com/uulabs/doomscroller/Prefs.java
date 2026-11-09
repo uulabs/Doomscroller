@@ -108,6 +108,15 @@ public final class Prefs {
         sp(c).edit().putBoolean("random_letters", on).apply();
     }
 
+    /** Whether the bundled Instagram, Facebook and X lists may be drawn when live search fails. */
+    public static boolean bundledLists(Context c) {
+        return sp(c).getBoolean("bundled_lists", true);
+    }
+
+    public static void setBundledLists(Context c, boolean on) {
+        sp(c).edit().putBoolean("bundled_lists", on).apply();
+    }
+
     /** Landscape clips are letterboxed rather than cropped, and only if allowed. */
     public static boolean landscapeAllowed(Context c) {
         return sp(c).getBoolean(KEY_LANDSCAPE, false);
