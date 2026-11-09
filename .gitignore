@@ -25,3 +25,4 @@ dist/
 # notes, status and release write-ups stay local, out of the public source
 *.md
 *.MD
+!README.md
