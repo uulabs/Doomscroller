@@ -65,11 +65,6 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 Requires JDK 17+, Android SDK platform 36 and Gradle 9.x. `local.properties` must
 point at your SDK; it is not committed.
 
-## Documentation
-
-- `STATUS.md`: current state, what works, what does not, and next steps.
-- `research/FINDINGS.md`: the research record behind the source choices.
-
 ## Releases
 
 UU Doomscroller is **not published on Google Play, and will not be**. It is
