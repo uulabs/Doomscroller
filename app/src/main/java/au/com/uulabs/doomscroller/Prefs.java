@@ -78,6 +78,16 @@ public final class Prefs {
         sp(c).edit().putLong(KEY_UPDATE_AT, at).apply();
     }
 
+    /** When the stall watchdog last restarted the app, so it cannot loop. */
+    public static long stallRestartAt(Context c) {
+        return sp(c).getLong("stall_restart_at", 0L);
+    }
+
+    public static void setStallRestartAt(Context c, long at) {
+        // commit, not apply: the process ends straight after this is written.
+        sp(c).edit().putLong("stall_restart_at", at).commit();
+    }
+
     public static boolean disclaimerAccepted(Context c) {
         return sp(c).getBoolean(KEY_DISCLAIMER, false);
     }

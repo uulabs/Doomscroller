@@ -192,6 +192,7 @@ public class Main extends Activity {
         });
         loadPlayed();
         super.onCreate(state);
+        startStallWatchdog();
         buildUi();
         applyInsets();
         gestures = new GestureDetector(this, new GestureDetector.SimpleOnGestureListener() {
@@ -669,8 +670,107 @@ public class Main extends Activity {
      * Shown once, before anything random can appear. The feed is unfiltered by
      * design, so the person has to be told that before they see it.
      */
+    // ------------------------------------------------------- stall watchdog
+
+    /** How long the screen thread may go without answering before the app restarts itself. */
+    private static final long STALL_LIMIT_MS = 8000L;
+    /** A second restart inside this window is not attempted: something else is wrong. */
+    private static final long STALL_RESTART_GAP_MS = 60_000L;
+    private volatile long uiBeatAt;
+    private volatile boolean uiBeatPending;
+    private volatile boolean watchForeground;
+
+    /**
+     * Restarts the app when the screen thread stops answering.
+     *
+     * On some phones the graphics driver deadlocks while the system WebView
+     * draws a video frame (seen on a Galaxy S21, Mali driver, inside
+     * eglCreateImageKHR: the render thread and the WebView's GPU thread wait
+     * on one driver lock that nothing holds). The screen thread then waits on
+     * the render thread for ever and the system offers "isn't responding".
+     * Nothing in this process can free that lock, so a thread that is not
+     * stuck notices the silence, starts {@link Restart} and ends the process;
+     * the feed is back in a couple of seconds instead of sitting dead.
+     */
+    private void startStallWatchdog() {
+        uiBeatAt = android.os.SystemClock.uptimeMillis();
+        final Runnable beat = new Runnable() {
+            @Override public void run() {
+                uiBeatAt = android.os.SystemClock.uptimeMillis();
+                uiBeatPending = false;
+            }
+        };
+        Thread watchdog = new Thread(new Runnable() {
+            @Override public void run() {
+                while (!destroyed) {
+                    try { Thread.sleep(1000); } catch (InterruptedException stopped) { return; }
+                    long now = android.os.SystemClock.uptimeMillis();
+                    if (!watchForeground) {
+                        // Not on screen: the system may legitimately leave this thread idle.
+                        uiBeatAt = now;
+                        uiBeatPending = false;
+                        continue;
+                    }
+                    if (BuildConfig.TRACE) simulateStallIfAsked();
+                    if (!uiBeatPending) {
+                        uiBeatPending = true;
+                        handler.post(beat);
+                    }
+                    if (now - uiBeatAt > STALL_LIMIT_MS) {
+                        restartAfterStall(now - uiBeatAt);
+                        return;
+                    }
+                }
+            }
+        }, "ui-watchdog");
+        watchdog.setDaemon(true);
+        watchdog.start();
+    }
+
+    /** Trace builds only: a marker file makes the screen thread sleep, to exercise the watchdog. */
+    private void simulateStallIfAsked() {
+        try {
+            java.io.File dir = getExternalFilesDir(null);
+            if (dir == null) return;
+            java.io.File marker = new java.io.File(dir, "stall");
+            if (!marker.exists() || !marker.delete()) return;
+            igTrace("watchdog: simulated stall requested");
+            handler.post(new Runnable() {
+                @Override public void run() {
+                    try { Thread.sleep(60_000); } catch (InterruptedException ignored) { }
+                }
+            });
+        } catch (RuntimeException ignored) {
+        }
+    }
+
+    private void restartAfterStall(long silentMs) {
+        long wall = System.currentTimeMillis();
+        if (wall - Prefs.stallRestartAt(this) < STALL_RESTART_GAP_MS) {
+            igTrace("watchdog: stalled " + silentMs + "ms, restarted too recently, leaving it");
+            return;
+        }
+        android.util.Log.w("Doom", "screen thread silent for " + silentMs + "ms, restarting");
+        try {
+            Prefs.setStallRestartAt(this, wall);
+            Intent again = new Intent(getApplicationContext(), Restart.class);
+            again.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK
+                    | Intent.FLAG_ACTIVITY_NO_ANIMATION);
+            getApplicationContext().startActivity(again);
+        } catch (RuntimeException failed) {
+            android.util.Log.w("Doom", "restart could not be started: " + failed);
+            return;
+        }
+        android.os.Process.killProcess(android.os.Process.myPid());
+    }
+
     private void showDisclaimerIfNeeded() {
         if (settingsPanel != null) {
+            return;
+        }
+        if (getIntent() != null && getIntent().getBooleanExtra(Restart.EXTRA_RECOVERED, false)) {
+            // Recovering from a stall: the person already accepted this a moment ago.
+            getIntent().removeExtra(Restart.EXTRA_RECOVERED);
             return;
         }
         final View gate = new ScrollView(this);
@@ -2824,6 +2924,7 @@ public class Main extends Activity {
     protected void onPause() {
         super.onPause();
         foreground = false;
+        watchForeground = false;
         syncDoomer();
         if (active != null && active.player != null) {
             active.player.pause();
@@ -2844,6 +2945,7 @@ public class Main extends Activity {
         super.onResume();
         Sources.setXBackground(Prefs.sources(this).contains(Sources.X));
         foreground = true;
+        watchForeground = true;
         syncDoomer();
         if (active != null && active.player != null && !paused && !gateOpen
                 && settingsPanel == null && !active.rejected && portraitVerified(active)) {
