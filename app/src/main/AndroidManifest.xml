@@ -29,5 +29,19 @@
             android:process=":restart"
             android:excludeFromRecents="true"
             android:theme="@android:style/Theme.Black.NoTitleBar.Fullscreen" />
+
+        <!-- Sits under the feed in the helper process; restarts the feed if its process dies. -->
+        <activity
+            android:name=".Shell"
+            android:exported="false"
+            android:process=":restart"
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden"
+            android:theme="@android:style/Theme.Black.NoTitleBar.Fullscreen" />
+
+        <!-- Same helper process: remembers whether the feed was on screen. -->
+        <service
+            android:name=".Keeper"
+            android:exported="false"
+            android:process=":restart" />
     </application>
 </manifest>

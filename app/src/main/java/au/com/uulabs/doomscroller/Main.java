@@ -180,6 +180,25 @@ public class Main extends Activity {
 
     @Override
     protected void onCreate(Bundle state) {
+        if (state == null && (getIntent() == null || !getIntent().getBooleanExtra(EXTRA_VIA_SHELL, false))) {
+            // Launched directly (the launcher icon): go round through Shell, so
+            // that Shell sits beneath the feed and can restart it after a crash.
+            bounced = true;
+            destroyed = true;
+            super.onCreate(null);
+            try {
+                startActivity(new Intent(this, Shell.class).addFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION));
+            } catch (RuntimeException unavailable) {
+                bounced = false;
+                destroyed = false;
+            }
+            if (bounced) {
+                finish();
+                overridePendingTransition(0, 0);
+                return;
+            }
+            super_onCreateDone = true;
+        }
         loadSeen();
         Sources.setSeenFilter(new Sources.SeenFilter() {
             @Override public boolean seen(String source, String id) {
@@ -191,8 +210,13 @@ public class Main extends Activity {
             @Override public void save(String csv) { Prefs.setXPool(Main.this, csv); }
         });
         loadPlayed();
-        super.onCreate(state);
+        if (!super_onCreateDone) super.onCreate(state);
         startStallWatchdog();
+        try {
+            bindService(new Intent(this, Keeper.class), keeperLink, BIND_AUTO_CREATE);
+        } catch (RuntimeException unavailable) {
+            // Without the keeper a driver crash simply closes the app, as before.
+        }
         buildUi();
         applyInsets();
         gestures = new GestureDetector(this, new GestureDetector.SimpleOnGestureListener() {
@@ -670,6 +694,36 @@ public class Main extends Activity {
      * Shown once, before anything random can appear. The feed is unfiltered by
      * design, so the person has to be told that before they see it.
      */
+    // ------------------------------------------------------- crash keeper
+
+    /** Set by Shell on the intent it starts the feed with. */
+    static final String EXTRA_VIA_SHELL = "au.com.uulabs.doomscroller.VIA_SHELL";
+    /** True when this instance only handed the launch to Shell and is on its way out. */
+    private boolean bounced;
+    private boolean super_onCreateDone;
+    private android.os.Messenger keeper;
+    private final android.content.ServiceConnection keeperLink = new android.content.ServiceConnection() {
+        @Override public void onServiceConnected(android.content.ComponentName name, android.os.IBinder service) {
+            keeper = new android.os.Messenger(service);
+            tellKeeper(watchForeground);
+        }
+
+        @Override public void onServiceDisconnected(android.content.ComponentName name) {
+            keeper = null;
+        }
+    };
+
+    /** Tells the keeper whether a death of this process should bring the feed back. */
+    private void tellKeeper(boolean onScreen) {
+        android.os.Messenger k = keeper;
+        if (k == null) return;
+        try {
+            k.send(android.os.Message.obtain(null, Keeper.MSG_FOREGROUND, onScreen ? 1 : 0, 0));
+        } catch (android.os.RemoteException gone) {
+            keeper = null;
+        }
+    }
+
     // ------------------------------------------------------- stall watchdog
 
     /** How long the screen thread may go without answering before the app restarts itself. */
@@ -732,6 +786,11 @@ public class Main extends Activity {
         try {
             java.io.File dir = getExternalFilesDir(null);
             if (dir == null) return;
+            java.io.File crash = new java.io.File(dir, "crash");
+            if (crash.exists() && crash.delete()) {
+                igTrace("watchdog: simulated native crash requested");
+                android.os.Process.sendSignal(android.os.Process.myPid(), 11);
+            }
             java.io.File marker = new java.io.File(dir, "stall");
             if (!marker.exists() || !marker.delete()) return;
             igTrace("watchdog: simulated stall requested");
@@ -753,6 +812,7 @@ public class Main extends Activity {
         android.util.Log.w("Doom", "screen thread silent for " + silentMs + "ms, restarting");
         try {
             Prefs.setStallRestartAt(this, wall);
+            tellKeeper(false);   // this restart is ours; the keeper must not start a second one
             Intent again = new Intent(getApplicationContext(), Restart.class);
             again.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK
                     | Intent.FLAG_ACTIVITY_NO_ANIMATION);
@@ -2827,6 +2887,7 @@ public class Main extends Activity {
 
     @Override public void onConfigurationChanged(android.content.res.Configuration configuration) {
         super.onConfigurationChanged(configuration);
+        if (bounced) return;
         root.requestApplyInsets();
         updateRotateControl();
     }
@@ -2923,8 +2984,10 @@ public class Main extends Activity {
     @Override
     protected void onPause() {
         super.onPause();
+        if (bounced) return;
         foreground = false;
         watchForeground = false;
+        tellKeeper(false);
         syncDoomer();
         if (active != null && active.player != null) {
             active.player.pause();
@@ -2943,9 +3006,11 @@ public class Main extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
+        if (bounced) return;
         Sources.setXBackground(Prefs.sources(this).contains(Sources.X));
         foreground = true;
         watchForeground = true;
+        tellKeeper(true);
         syncDoomer();
         if (active != null && active.player != null && !paused && !gateOpen
                 && settingsPanel == null && !active.rejected && portraitVerified(active)) {
@@ -2956,7 +3021,10 @@ public class Main extends Activity {
     @Override
     protected void onDestroy() {
         super.onDestroy();
+        if (bounced) return;
         destroyed = true;
+        tellKeeper(false);
+        try { unbindService(keeperLink); } catch (RuntimeException notBound) { }
         if (doomer != null) doomer.stop();
         if (active != null) handler.removeCallbacksAndMessages(active);
         if (pending != null) handler.removeCallbacksAndMessages(pending);

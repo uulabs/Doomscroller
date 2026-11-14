@@ -17,7 +17,7 @@ public final class Restart extends Activity {
     @Override
     protected void onCreate(Bundle state) {
         super.onCreate(state);
-        Intent feed = new Intent(this, Main.class);
+        Intent feed = new Intent(this, Shell.class);
         feed.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
         feed.putExtra(EXTRA_RECOVERED, true);
         startActivity(feed);
