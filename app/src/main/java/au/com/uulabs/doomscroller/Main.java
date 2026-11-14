@@ -125,6 +125,10 @@ public class Main extends Activity {
     private boolean wantNext;
     /** True while the opening notice is up: nothing may play behind it. */
     private boolean gateOpen;
+    /** When the clip on screen was first seen finished and still up; 0 while it is not. */
+    private long endedSince;
+    /** When the clip on screen was first seen halted without the person pausing it. */
+    private long haltedSince;
     private LinearLayout controlsBar;
     private TextView controlsToggle;
     private TextView controlsTime;
@@ -986,6 +990,45 @@ public class Main extends Activity {
                                 : active.item.source + (active.rejected ? " rejected" : " away"))
                                 + " pending=" + pending.item.source + " wantNext=" + wantNext);
                         next();
+                    }
+                    boolean finished = active != null && !active.rejected && active.player != null
+                            && active.player.getPlaybackState() == Player.STATE_ENDED;
+                    if (!finished) {
+                        endedSince = 0;
+                    } else if (endedSince == 0) {
+                        endedSince = now;
+                    } else if (now - endedSince > 1500 && !gateOpen && settingsPanel == null) {
+                        // A finished clip is still on screen. Whatever lost the
+                        // advance, it is owed: take the next clip now if one is
+                        // ready, otherwise make sure one is being fetched.
+                        igTrace("finished clip still up after " + (now - endedSince)
+                                + "ms, pending=" + (pending == null ? "none" : pending.item.source)
+                                + " wantNext=" + wantNext);
+                        endedSince = now;
+                        wantNext = true;
+                        if (pendingReady() && portraitVerified(pending)) {
+                            next();
+                        } else if (pending == null) {
+                            pump();
+                        }
+                    }
+                    boolean halted = active != null && !active.rejected && active.player != null
+                            && !paused && !gateOpen && settingsPanel == null
+                            && active.player.getPlaybackState() == Player.STATE_READY
+                            && !active.player.getPlayWhenReady() && portraitVerified(active)
+                            // a clip rolled away to the loading face is paused on purpose
+                            && active.rootView != null
+                            && Math.abs(active.rootView.getTranslationY()) <= 1f;
+                    if (!halted) {
+                        haltedSince = 0;
+                    } else if (haltedSince == 0) {
+                        haltedSince = now;
+                    } else if (now - haltedSince > 3000) {
+                        // Something other than the person paused the clip (another
+                        // app took the sound, say) and nothing started it again.
+                        igTrace("clip halted for " + (now - haltedSince) + "ms, resuming");
+                        haltedSince = 0;
+                        active.player.play();
                     }
                     if (blank && blankSince != 0 && stuckActive()) {
                         long waited = now - blankSince;
@@ -2444,9 +2487,13 @@ public class Main extends Activity {
             return;
         }
         if (pending.navigation == 0 && isPlayed(pending.item.toString())) {
-            // Already watched. Only history may replay a clip.
+            // Already watched. Only history may replay a clip. The advance is
+            // still owed: without wantNext the replacement loaded and then
+            // waited for ever behind a clip that had already finished.
             rejectSlot(pending);
             starving = true;
+            wantNext = true;
+            pump();
             return;
         }
         wantNext = false;
