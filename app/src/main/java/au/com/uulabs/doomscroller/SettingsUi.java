@@ -177,7 +177,18 @@ final class SettingsUi {
                 "When the search engines refuse the phone, Instagram, Facebook and X fall back to "
                 + "lists of public clips shipped with the app. Off, the feed stays purely live and "
                 + "waits for the web to answer instead",
-                bundledLists, false));
+                bundledLists, true));
+        final Toggle safeSearch = new Toggle(context);
+        safeSearch.setChecked(Prefs.safeSearchDisabled(context));
+        safeSearch.setOnChangeListener(new Toggle.OnChange() {
+            @Override
+            public void onChanged(boolean on) {
+                Prefs.setSafeSearchDisabled(context, on);
+            }
+        });
+        sourceCard.addView(row(context, "Disable safe search (NSFW)",
+                "Allow explicit results in random searches. Entered searches always disable safe search",
+                safeSearch, false));
         column.addView(sourceCard);
 
         // ---- formats

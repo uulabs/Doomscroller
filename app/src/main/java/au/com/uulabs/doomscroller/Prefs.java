@@ -127,6 +127,15 @@ public final class Prefs {
         sp(c).edit().putBoolean("bundled_lists", on).apply();
     }
 
+    /** Whether random-feed index searches may include explicit results. */
+    public static boolean safeSearchDisabled(Context c) {
+        return sp(c).getBoolean("disable_safe_search", false);
+    }
+
+    public static void setSafeSearchDisabled(Context c, boolean off) {
+        sp(c).edit().putBoolean("disable_safe_search", off).apply();
+    }
+
     /** Landscape clips are letterboxed rather than cropped, and only if allowed. */
     public static boolean landscapeAllowed(Context c) {
         return sp(c).getBoolean(KEY_LANDSCAPE, false);

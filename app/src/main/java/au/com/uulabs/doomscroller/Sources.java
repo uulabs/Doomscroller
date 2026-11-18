@@ -486,7 +486,9 @@ public final class Sources {
             long now = System.currentTimeMillis();
             if (now < indexBlockedUntil.get(i)) continue;
             try {
-                String html = get(indexes[i] + query, null, true, LOOKUP_TIMEOUT_MS);
+                String safeOff = (!allowArchive || safeSearchDisabled)
+                        ? (i == 0 ? "&safesearch=off" : "&kp=-2") : "";
+                String html = get(indexes[i] + query + safeOff, null, true, LOOKUP_TIMEOUT_MS);
                 // DuckDuckGo wraps destinations in percent-encoded uddg links.
                 StringBuilder decoded = new StringBuilder(html);
                 Matcher links = Pattern.compile("uddg=([^&\"<> ]+)").matcher(html);
@@ -985,9 +987,14 @@ public final class Sources {
      * waits and retries rather than showing a list the app shipped with.
      */
     private static volatile boolean bundledLists = true;
+    private static volatile boolean safeSearchDisabled;
 
     public static void setBundledLists(boolean allowed) {
         bundledLists = allowed;
+    }
+
+    public static void setSafeSearchDisabled(boolean disabled) {
+        safeSearchDisabled = disabled;
     }
 
     public static void setAllowLandscape(boolean allowed) {
@@ -1005,17 +1012,31 @@ public final class Sources {
     }
 
     private static List<Item> youtube(String word, boolean randomSample) throws IOException {
+        List<Item> out = new ArrayList<Item>();
+        Set<String> seen = new HashSet<String>();
+        // Explicit searches also look for social reposts. YouTube suppresses some
+        // bare adult terms entirely, while the same words in their social context
+        // return playable Shorts; this remains a search for the entered words.
+        addYoutubeResults(word, randomSample ? 8 + Math.abs(PICK.nextInt(40)) : 0,
+                20, out, seen);
+        if (!randomSample) {
+            try {
+                addYoutubeResults(word + " tiktok", 0, 40, out, seen);
+            } catch (IOException unavailable) {
+                if (out.isEmpty()) throw unavailable;
+            }
+        }
+        return out;
+    }
+
+    private static void addYoutubeResults(String word, int skip, int limit,
+                                          List<Item> out, Set<String> seen) throws IOException {
         String html = get("https://www.youtube.com/results?search_query=" + enc(word)
                 + (allowLandscape ? "" : "&sp=EgIYAQ%3D%3D"),
                 "SOCS=CAI; CONSENT=YES+cb");
         Matcher m = Pattern.compile("\"videoId\":\"([A-Za-z0-9_-]{11})\"").matcher(html);
-        List<Item> out = new ArrayList<Item>();
-        Set<String> seen = new HashSet<String>();
-        // Random mode samples beyond the popular first results; an explicit
-        // search starts at the most relevant answers so a narrow query is not skipped.
-        int skip = randomSample ? 8 + Math.abs(PICK.nextInt(40)) : 0;
         int index = 0;
-        while (m.find() && out.size() < 20) {
+        while (m.find() && out.size() < limit) {
             if (index++ < skip) {
                 continue;
             }
@@ -1026,7 +1047,6 @@ public final class Sources {
             out.add(new Item(YOUTUBE, id, "", "ytprobe",
                     "https://www.youtube.com/watch?v=" + id, 0, 0));
         }
-        return out;
     }
 
     // ---------------------------------------------------------------- tiktok
@@ -1262,7 +1282,7 @@ public final class Sources {
     }
 
     private static List<Item> xSearch(String word) throws IOException {
-        Matcher matches = STATUS_LINK.matcher(statusSearch(word));
+        Matcher matches = STATUS_LINK.matcher(statusSearch(word, true));
         List<String> ids = new ArrayList<String>();
         Set<String> unique = new HashSet<String>();
         while (matches.find() && unique.add(matches.group(2))) ids.add(matches.group(2));
@@ -1393,6 +1413,10 @@ public final class Sources {
 
     /** Search results naming posts on X about the subject, with their snippets. */
     private static String statusSearch(String word) throws IOException {
+        return statusSearch(word, false);
+    }
+
+    private static String statusSearch(String word, boolean explicitSearch) throws IOException {
         String query = enc("site:x.com /status/ " + word + " video");
         String[] indexes = {"https://search.brave.com/search?q=",
                 "https://html.duckduckgo.com/html/?q="};
@@ -1404,7 +1428,9 @@ public final class Sources {
             }
             try {
                 long started = System.currentTimeMillis();
-                String html = get(indexes[i] + query, null, true, LOOKUP_TIMEOUT_MS);
+                String safeOff = (explicitSearch || safeSearchDisabled)
+                        ? (i == 0 ? "&safesearch=off" : "&kp=-2") : "";
+                String html = get(indexes[i] + query + safeOff, null, true, LOOKUP_TIMEOUT_MS);
                 StringBuilder decoded = new StringBuilder(html);
                 Matcher links = Pattern.compile("uddg=([^&\"<> ]+)").matcher(html);
                 while (links.find()) {

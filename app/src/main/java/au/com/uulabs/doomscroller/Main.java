@@ -294,6 +294,7 @@ public class Main extends Activity {
         Sources.setAllowLandscape(Prefs.landscapeAllowed(this));
         Sources.setLanguageFilter(Prefs.languages(this), Prefs.knownLanguageOnly(this));
         Sources.setBundledLists(Prefs.bundledLists(this));
+        Sources.setSafeSearchDisabled(Prefs.safeSearchDisabled(this));
         Sources.setXBackground(Prefs.sources(this).contains(Sources.X));
         if (BuildConfig.TRACE) {
             Sources.trace = new java.util.function.Consumer<String>() {
@@ -3056,6 +3057,7 @@ public class Main extends Activity {
             Sources.setAllowLandscape(Prefs.landscapeAllowed(this));
             Sources.setLanguageFilter(Prefs.languages(this), Prefs.knownLanguageOnly(this));
             Sources.setBundledLists(Prefs.bundledLists(this));
+            Sources.setSafeSearchDisabled(Prefs.safeSearchDisabled(this));
             Sources.setXBackground(Prefs.sources(this).contains(Sources.X));
             igTrace("settings close: landscape=" + Prefs.landscapeAllowed(this)
                     + " active=" + (active != null)
