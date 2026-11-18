@@ -48,8 +48,8 @@ import java.util.concurrent.Executors;
 /**
  * UU Doomscroller - prototype.
  *
- * Discovery happens on the device from a randomly chosen subject; playback is
- * always a direct media stream through ExoPlayer. No provider player is ever
+ * Discovery happens on the device from a randomly chosen subject or an explicit
+ * search; playback is always a direct media stream through ExoPlayer. No provider player is ever
  * loaded, which is what keeps advertising out of the feed entirely.
  *
  * Two player slots are kept: one playing, one already buffering the next
@@ -74,6 +74,9 @@ public class Main extends Activity {
     private TextView status;
     private View settingsButton;
     private View shareButton;
+    private SearchControl searchControl;
+    private volatile String feedQuery = "";
+    private volatile long feedRevision;
     private TextView debugText;
     private View settingsPanel;
     private View loadingView;
@@ -266,10 +269,11 @@ public class Main extends Activity {
 
     @Override
     public boolean dispatchTouchEvent(MotionEvent ev) {
-        if (ev.getAction() == MotionEvent.ACTION_DOWN) {
+        boolean overSearch = searchControl != null && searchControl.contains(ev.getX(), ev.getY());
+        if (ev.getAction() == MotionEvent.ACTION_DOWN && !overSearch) {
             showControls();
         }
-        if (gestures != null) {
+        if (gestures != null && !overSearch) {
             gestures.onTouchEvent(ev);
         }
         return super.dispatchTouchEvent(ev);
@@ -331,6 +335,22 @@ public class Main extends Activity {
             }
         });
         root.addView(shareButton, cornerParams(Gravity.TOP | Gravity.LEFT));
+
+        searchControl = new SearchControl(this, new SearchControl.Listener() {
+            @Override
+            public void onSearch(String query) {
+                changeFeedQuery(query);
+            }
+
+            @Override
+            public void onClear() {
+                changeFeedQuery("");
+            }
+        });
+        FrameLayout.LayoutParams searchParams = cornerParams(Gravity.TOP | Gravity.RIGHT);
+        searchParams.rightMargin = dp(14);
+        root.addView(searchControl.view(), searchParams);
+
         rotateButton = glyph("↻");
         rotateButton.setContentDescription("Rotate video");
         FrameLayout.LayoutParams rotateParams = cornerParams(Gravity.TOP | Gravity.RIGHT);
@@ -1123,6 +1143,9 @@ public class Main extends Activity {
             if (shareButton != null) {
                 shareButton.bringToFront();
             }
+            if (searchControl != null) {
+                searchControl.view().bringToFront();
+            }
         }
     }
 
@@ -1183,15 +1206,19 @@ public class Main extends Activity {
         return p;
     }
 
-    /**
-     * Settings sits on top and share directly beneath it, both in the top left.
-     * Every provider player puts its logo top right and its action buttons down
-     * the right edge, so that corner is the one place nothing overlaps.
-     */
+    /** Settings and share sit top left; search sits top right with rotation beneath it. */
     private void placeButtons(int topInset) {
+        if (searchControl != null) {
+            FrameLayout.LayoutParams p =
+                    (FrameLayout.LayoutParams) searchControl.view().getLayoutParams();
+            p.topMargin = topInset + dp(12);
+            searchControl.view().setLayoutParams(p);
+            int available = root.getWidth() > 0 ? root.getWidth() - dp(88) : dp(300);
+            searchControl.setExpandedWidth(Math.max(dp(160), Math.min(dp(330), available)));
+        }
         if (rotateButton != null) {
             FrameLayout.LayoutParams p = (FrameLayout.LayoutParams) rotateButton.getLayoutParams();
-            p.topMargin = topInset + dp(12);
+            p.topMargin = topInset + dp(68);
             rotateButton.setLayoutParams(p);
         }
         if (settingsButton != null) {
@@ -1220,13 +1247,20 @@ public class Main extends Activity {
                     bottom = insets.getSystemWindowInsetBottom();
                     top = insets.getSystemWindowInsetTop();
                 }
+                int right = Build.VERSION.SDK_INT >= 30
+                        ? insets.getInsets(WindowInsets.Type.systemBars()
+                        | WindowInsets.Type.displayCutout()).right
+                        : insets.getSystemWindowInsetRight();
                 if (rotateButton != null) {
-                    int right = Build.VERSION.SDK_INT >= 30
-                            ? insets.getInsets(WindowInsets.Type.systemBars() | WindowInsets.Type.displayCutout()).right
-                            : insets.getSystemWindowInsetRight();
                     FrameLayout.LayoutParams rp = (FrameLayout.LayoutParams) rotateButton.getLayoutParams();
                     rp.rightMargin = dp(14) + right;
                     rotateButton.setLayoutParams(rp);
+                }
+                if (searchControl != null) {
+                    FrameLayout.LayoutParams sp =
+                            (FrameLayout.LayoutParams) searchControl.view().getLayoutParams();
+                    sp.rightMargin = dp(14) + right;
+                    searchControl.view().setLayoutParams(sp);
                 }
                 if (controlsBar != null) {
                     // Keep the bar above the navigation bar rather than underneath it.
@@ -1250,6 +1284,63 @@ public class Main extends Activity {
     private int dp(int value) {
         return (int) TypedValue.applyDimension(
                 TypedValue.COMPLEX_UNIT_DIP, value, getResources().getDisplayMetrics());
+    }
+
+    private void changeFeedQuery(String query) {
+        if (feedQuery.equals(query)) {
+            return;
+        }
+        feedQuery = query;
+        feedRevision++;
+        nextDiscoveryAt = 0;
+        handler.removeCallbacks(retryDiscovery);
+        synchronized (this) {
+            sourceRest.clear();
+            sourceStrikes.clear();
+        }
+        synchronized (ready) { ready.clear(); }
+        history.clear();
+        forward.clear();
+
+        Slot oldActive = active;
+        Slot oldPending = pending;
+        active = null;
+        pending = null;
+        current = null;
+        discardForFeedChange(oldPending);
+        discardForFeedChange(oldActive);
+        blankNow = true;
+        paused = false;
+        wantNext = true;
+        starving = true;
+        endedSince = 0;
+        haltedSince = 0;
+        swapDirection = 1f;
+        igTrace(query.isEmpty() ? "feed returned to random subjects" : "feed search changed");
+        setLoading(true);
+        pump();
+    }
+
+    private void discardForFeedChange(Slot slot) {
+        if (slot == null) {
+            return;
+        }
+        handler.removeCallbacksAndMessages(slot);
+        slot.rejected = true;
+        if (slot.player != null) {
+            try {
+                slot.player.setVolume(0f);
+                slot.player.stop();
+                slot.player.release();
+            } catch (Exception ignored) {
+            }
+        }
+        if (slot.web != null) {
+            silenceAndDestroy(slot.web);
+        }
+        if (slot.rootView != null && slot.rootView.getParent() == stage) {
+            stage.removeView(slot.rootView);
+        }
     }
 
     private volatile long nextDiscoveryAt;
@@ -1295,10 +1386,11 @@ public class Main extends Activity {
         try { io.execute(new Runnable() {
             @Override
             public void run() {
+                final long revision = feedRevision;
                 boolean found = false;
                 int attempts = 0;
                 try {
-                    while (!destroyed) {
+                    while (!destroyed && revision == feedRevision) {
                         synchronized (ready) {
                             if (ready.size() >= (starving ? PREFETCH_STARVING : PREFETCH)) {
                                 break;
@@ -1318,9 +1410,10 @@ public class Main extends Activity {
                             }
                             continue;   // this subject was refused; try another
                         }
-                        found = true;
                         synchronized (ready) {
+                            if (revision != feedRevision) break;
                             ready.addLast(r);
+                            found = true;
                         }
                         handler.post(new Runnable() {
                             @Override
@@ -1330,7 +1423,7 @@ public class Main extends Activity {
                         });
                     }
                 } finally {
-                    if (!found) {
+                    if (!found && revision == feedRevision) {
                         // Nothing came back from this source: leave starving mode
                         // so the next pass rotates instead of insisting on one.
                         starving = false;
@@ -1387,27 +1480,28 @@ public class Main extends Activity {
             inFlight.add(source);
         }
         try {
-            return produceFrom(sources, source);
+            return produceFrom(sources, source, feedQuery);
         } finally {
             synchronized (inFlight) { inFlight.remove(source); }
         }
     }
 
-    private Ready produceFrom(Set<String> sources, String source) {
-        String word = pickWord(source);
+    private Ready produceFrom(Set<String> sources, String source, String query) {
+        boolean searching = !query.isEmpty();
+        String word = searching ? query : pickWord(source);
         List<Sources.Item> candidates;
         try {
-            candidates = Sources.fetch(source, word);
+            candidates = searching ? Sources.fetchSearch(source, word) : Sources.fetch(source, word);
         } catch (Exception e) {
             return null;
         }
-        if (Sources.INSTAGRAM.equals(source) || Sources.FACEBOOK.equals(source)) {
+        if (!searching && (Sources.INSTAGRAM.equals(source) || Sources.FACEBOOK.equals(source))) {
             if (candidates.isEmpty()) broadenMeta.add(source);
             else broadenMeta.remove(source);
         }
         lastSource = source;
         igTrace("candidates " + source + " " + candidates.size()
-                + " word=" + word + " " + Sources.supplyAudit());
+                + (searching ? " search" : " word=" + word) + " " + Sources.supplyAudit());
         List<Sources.Item> filtered = filter(candidates);
         for (Sources.Item item : filtered) {
             String url = resolve(item);
@@ -2954,6 +3048,7 @@ public class Main extends Activity {
             settingsPanel = null;
             if (settingsButton != null) settingsButton.setVisibility(View.VISIBLE);
             if (shareButton != null) shareButton.setVisibility(View.VISIBLE);
+            if (searchControl != null) searchControl.view().setVisibility(View.VISIBLE);
             if (rotateButton != null) updateRotateControl();
             manualRotation = false;
             applyOrientation();
@@ -2983,6 +3078,10 @@ public class Main extends Activity {
             pump();
             fill();
             return;
+        }
+        if (searchControl != null) {
+            searchControl.cancelEditing();
+            searchControl.view().setVisibility(View.GONE);
         }
         if (active != null && active.player != null) {
             active.player.pause();
@@ -3021,6 +3120,10 @@ public class Main extends Activity {
 
     @Override
     public void onBackPressed() {
+        if (searchControl != null && searchControl.isEditing()) {
+            searchControl.cancelEditing();
+            return;
+        }
         if (settingsPanel != null) {
             toggleSettings();
             return;

@@ -10,12 +10,14 @@ video feed assembled from several public sources.
 > belongs to can close whenever it likes.
 
 - **No account, no server, no API key.** Every video is found on the device at the
-  moment it is needed, from a randomly chosen subject word.
+  moment it is needed, from a randomly chosen subject or a search you enter.
 - **No provider player for YouTube.** A hidden WebView runs `youtubei.js`; the
   app mediates its requests and plays the resulting stream itself, so there are no
   adverts, no subscribe button and no browser chrome.
-- **Two controls.** Settings top left, share beneath it. Swipe up for the next
-  video, swipe down for the previous, tap to pause.
+- **Feed controls.** Settings top left, share beneath it, search top right. Search
+  expands into a text bubble; submitting replaces the icon with your words and an
+  X, which clears the search and restores the random feed. Search words are never
+  saved as history. Swipe up for the next video, swipe down for the previous, tap to pause.
 - **Unfiltered by design.** A first-run notice says so before anything plays.
 
 | First run | Settings | Playing |
@@ -33,6 +35,11 @@ Each draw takes a subject at random, searches every enabled source for it and
 plays whatever comes back first. Subjects are spent from a shuffled pool, so
 nothing returns until everything else has been used, including across
 restarts.
+
+An entered search takes the subject's place for every enabled source. It clears
+clips queued by the previous feed, uses no random fallback lists, and lasts only
+until its X is tapped or the app is closed. The search words themselves are not
+written to preferences, logs or a history list.
 
 There is no list of videos, channels or creators anywhere. A subject decides
 only what gets *asked for*, never what comes back; the results are whatever the

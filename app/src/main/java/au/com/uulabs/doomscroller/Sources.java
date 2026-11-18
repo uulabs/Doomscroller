@@ -41,7 +41,10 @@ public final class Sources {
     /** Where discovery reports what it did; null outside trace builds. */
     public static volatile java.util.function.Consumer<String> trace;
 
+    private static final ThreadLocal<Boolean> PRIVATE_SEARCH = new ThreadLocal<Boolean>();
+
     private static void note(String line) {
+        if (Boolean.TRUE.equals(PRIVATE_SEARCH.get())) return;
         java.util.function.Consumer<String> t = trace;
         if (t != null) t.accept(line);
     }
@@ -353,6 +356,20 @@ public final class Sources {
         return Collections.emptyList();
     }
 
+    /** A user-entered search never draws from another subject's pool or a random fallback list. */
+    public static List<Item> fetchSearch(String source, String word) throws IOException {
+        PRIVATE_SEARCH.set(Boolean.TRUE);
+        try {
+            if (YOUTUBE.equals(source)) return youtube(word, false);
+            if (INSTAGRAM.equals(source)) return metaSearch(INSTAGRAM, word);
+            if (FACEBOOK.equals(source)) return metaSearch(FACEBOOK, word);
+            if (X.equals(source)) return xSearch(word);
+            return fetch(source, word);
+        } finally {
+            PRIVATE_SEARCH.remove();
+        }
+    }
+
     private static final java.util.concurrent.atomic.AtomicLongArray indexBlockedUntil =
             new java.util.concurrent.atomic.AtomicLongArray(3);
 
@@ -457,6 +474,10 @@ public final class Sources {
 
     /** Independent public indexes; never retry a blocked index in a tight loop. */
     private static String reelSearch(String host, String word) throws IOException {
+        return reelSearch(host, word, true);
+    }
+
+    private static String reelSearch(String host, String word, boolean allowArchive) throws IOException {
         String query = enc("site:" + host + "/reel " + word);
         String[] indexes = {"https://search.brave.com/search?q=",
                 "https://html.duckduckgo.com/html/?q="};
@@ -482,7 +503,7 @@ public final class Sources {
             }
         }
         long now = System.currentTimeMillis();
-        if (now >= indexBlockedUntil.get(2)) {
+        if (allowArchive && now >= indexBlockedUntil.get(2)) {
             try {
                 String links = archiveReels(host);
                 indexBlockedUntil.set(2, now + 15_000L);
@@ -493,6 +514,25 @@ public final class Sources {
             }
         }
         return "";
+    }
+
+    private static List<Item> metaSearch(String source, String word) throws IOException {
+        boolean facebook = FACEBOOK.equals(source);
+        String host = facebook ? "facebook.com" : "instagram.com";
+        Pattern link = facebook
+                ? Pattern.compile("facebook\\.com/reel/([0-9]{6,})")
+                : Pattern.compile("instagram\\.com/reel/([A-Za-z0-9_-]{5,})");
+        Matcher matches = link.matcher(reelSearch(host, word, false));
+        List<String> ids = new ArrayList<String>();
+        Set<String> unique = new HashSet<String>();
+        while (matches.find() && unique.add(matches.group(1))) ids.add(matches.group(1));
+        List<Item> out = new ArrayList<Item>();
+        for (String id : unseen(source, ids)) {
+            out.add(new Item(source, id, indexTitle(id), facebook ? "fbprobe" : "igprobe",
+                    facebook ? "" : "https://www.instagram.com/reel/" + id + "/embed/", 0, 0));
+            if (out.size() >= 20) break;
+        }
+        return out;
     }
 
     private static final java.util.Map<String, Integer> archivePages = new java.util.HashMap<>();
@@ -961,19 +1001,19 @@ public final class Sources {
      * YouTube's own stream either way.
      */
     private static List<Item> youtube(String word) throws IOException {
+        return youtube(word, true);
+    }
+
+    private static List<Item> youtube(String word, boolean randomSample) throws IOException {
         String html = get("https://www.youtube.com/results?search_query=" + enc(word)
                 + (allowLandscape ? "" : "&sp=EgIYAQ%3D%3D"),
                 "SOCS=CAI; CONSENT=YES+cb");
         Matcher m = Pattern.compile("\"videoId\":\"([A-Za-z0-9_-]{11})\"").matcher(html);
         List<Item> out = new ArrayList<Item>();
         Set<String> seen = new HashSet<String>();
-        // The first few results for a word are the same every time. Skipping
-        // them samples the long tail, which is both less repetitive and more
-        // in keeping with "completely random".
-        // Skipping only the first handful returns the same popular clips on
-        // every device. Sampling far deeper, from a per-install offset, spreads
-        // the choice out and reaches past what everyone else sees.
-        int skip = 8 + Math.abs(PICK.nextInt(40));
+        // Random mode samples beyond the popular first results; an explicit
+        // search starts at the most relevant answers so a narrow query is not skipped.
+        int skip = randomSample ? 8 + Math.abs(PICK.nextInt(40)) : 0;
         int index = 0;
         while (m.find() && out.size() < 20) {
             if (index++ < skip) {
@@ -1219,6 +1259,18 @@ public final class Sources {
             }
         }
         if (added == 0) XS.blockedUntil = now + 5000L;
+    }
+
+    private static List<Item> xSearch(String word) throws IOException {
+        Matcher matches = STATUS_LINK.matcher(statusSearch(word));
+        List<String> ids = new ArrayList<String>();
+        Set<String> unique = new HashSet<String>();
+        while (matches.find() && unique.add(matches.group(2))) ids.add(matches.group(2));
+        List<Item> out = new ArrayList<Item>();
+        for (String id : screenPosts(unseen(X, ids), 6)) {
+            out.add(new Item(X, id, indexTitle(id), "xprobe", "", 0, 0));
+        }
+        return out;
     }
 
     private static List<Item> x(String word) throws IOException {
